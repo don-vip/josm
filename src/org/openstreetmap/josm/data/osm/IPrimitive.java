@@ -1,16 +1,22 @@
 // License: GPL. For details, see LICENSE file.
 package org.openstreetmap.josm.data.osm;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
+import java.util.List;
+import java.util.Map;
 
+import org.openstreetmap.josm.data.osm.search.SearchCompiler.Match;
 import org.openstreetmap.josm.data.osm.visitor.PrimitiveVisitor;
 import org.openstreetmap.josm.tools.LanguageInfo;
+import org.openstreetmap.josm.tools.template_engine.TemplateEngineDataProvider;
 
 /**
  * IPrimitive captures the common functions of {@link OsmPrimitive} and {@link PrimitiveData}.
  * @since 4098
  */
-public interface IPrimitive extends Tagged, PrimitiveId, Stylable, Comparable<IPrimitive> {
+public interface IPrimitive extends Tagged, PrimitiveId, Stylable, TemplateEngineDataProvider, Comparable<IPrimitive> {
 
     /**
      * Replies <code>true</code> if the object has been modified since it was loaded from
@@ -155,6 +161,7 @@ public interface IPrimitive extends Tagged, PrimitiveId, Stylable, Comparable<IP
     /**
      * Determines whether the primitive is selected
      * @return whether the primitive is selected
+     * @see OsmData#isSelected(IPrimitive)
      * @since 13664
      */
     default boolean isSelected() {
@@ -297,6 +304,14 @@ public interface IPrimitive extends Tagged, PrimitiveId, Stylable, Comparable<IP
     void accept(PrimitiveVisitor visitor);
 
     /**
+     * <p>Visits {@code visitor} for all referrers.</p>
+     *
+     * @param visitor the visitor. Ignored, if null.
+     * @since 12809
+     */
+    void visitReferrers(PrimitiveVisitor visitor);
+
+    /**
      * Replies the name of this primitive. The default implementation replies the value
      * of the tag <code>name</code> or null, if this tag is not present.
      *
@@ -372,6 +387,20 @@ public interface IPrimitive extends Tagged, PrimitiveId, Stylable, Comparable<IP
     }
 
     /**
+     * Returns {@link #getKeys()} for which {@code key} is interesting.
+     * @return A map of interesting tags
+     */
+    Map<String, String> getInterestingTags();
+
+    /**
+     * Replies true if other isn't null and has the same interesting tags (key/value-pairs) as this.
+     *
+     * @param other the other object primitive
+     * @return true if other isn't null and has the same interesting tags (key/value-pairs) as this.
+     */
+    boolean hasSameInterestingTags(IPrimitive other);
+
+    /**
      * true if this object has direction dependent tags (e.g. oneway)
      * @return {@code true} if this object has direction dependent tags
      * @since 13662
@@ -384,4 +413,41 @@ public interface IPrimitive extends Tagged, PrimitiveId, Stylable, Comparable<IP
      * @since 13662
      */
     boolean reversedDirection();
+
+    /**
+     * Fetches the bounding box of the primitive.
+     * @return Bounding box of the object
+     * @since xxx
+     */
+    BBox getBBox();
+
+    /**
+     * Returns the parent data set of this primitive.
+     * @return OsmData this primitive is part of.
+     */
+    OsmData<? extends IPrimitive, ? extends INode, ? extends IWay<?, ?>, ? extends IRelation<?>> getDataSet();
+
+    /**
+     * Gets a list of all primitives in the current dataset that reference this primitive.
+     * @return The referrers
+     */
+    List<IPrimitive> getIReferrers();
+
+    @Override
+    default Collection<String> getTemplateKeys() {
+        // To override if needed
+        return Collections.emptyList();
+    }
+
+    @Override
+    default Object getTemplateValue(String key, boolean special) {
+        // To override if needed
+        return null;
+    }
+
+    @Override
+    default boolean evaluateCondition(Match condition) {
+        // To override if needed
+        return false;
+    }
 }

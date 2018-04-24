@@ -18,7 +18,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.openstreetmap.josm.data.osm.DataSet;
-import org.openstreetmap.josm.data.osm.OsmPrimitive;
+import org.openstreetmap.josm.data.osm.IPrimitive;
+import org.openstreetmap.josm.data.osm.OsmData;
 import org.openstreetmap.josm.data.osm.Relation;
 import org.openstreetmap.josm.data.osm.RelationMember;
 import org.openstreetmap.josm.data.osm.event.AbstractDatasetChangedEvent;
@@ -108,7 +109,7 @@ public class AutoCompletionManager implements DataSetListener {
     /** If the dirty flag is set true, a rebuild is necessary. */
     protected boolean dirty;
     /** The data set that is managed */
-    protected DataSet ds;
+    protected OsmData<? extends IPrimitive, ?, ?, ?> ds;
 
     /**
      * the cached tags given by a tag key and a list of values for this tag
@@ -139,14 +140,14 @@ public class AutoCompletionManager implements DataSetListener {
      */
     static final Set<String> PRESET_ROLE_CACHE = new HashSet<>();
 
-    private static final Map<DataSet, AutoCompletionManager> INSTANCES = new HashMap<>();
+    private static final Map<OsmData<?, ?, ?, ?>, AutoCompletionManager> INSTANCES = new HashMap<>();
 
     /**
      * Constructs a new {@code AutoCompletionManager}.
      * @param ds data set
      * @throws NullPointerException if ds is null
      */
-    public AutoCompletionManager(DataSet ds) {
+    public AutoCompletionManager(OsmData<?, ?, ?, ?> ds) {
         this.ds = Objects.requireNonNull(ds);
         this.dirty = true;
     }
@@ -176,8 +177,8 @@ public class AutoCompletionManager implements DataSetListener {
         cachePrimitives(ds.allNonDeletedCompletePrimitives());
     }
 
-    protected void cachePrimitives(Collection<? extends OsmPrimitive> primitives) {
-        for (OsmPrimitive primitive : primitives) {
+    protected void cachePrimitives(Collection<? extends IPrimitive> primitives) {
+        for (IPrimitive primitive : primitives) {
             cachePrimitiveTags(primitive);
             if (primitive instanceof Relation) {
                 cacheRelationMemberRoles((Relation) primitive);
@@ -191,7 +192,7 @@ public class AutoCompletionManager implements DataSetListener {
      *
      * @param primitive an OSM primitive
      */
-    protected void cachePrimitiveTags(OsmPrimitive primitive) {
+    protected void cachePrimitiveTags(IPrimitive primitive) {
         for (String key: primitive.keySet()) {
             String value = primitive.get(key);
             tagCache.put(key, value);
@@ -475,14 +476,18 @@ public class AutoCompletionManager implements DataSetListener {
     }
 
     private AutoCompletionManager registerListeners() {
-        ds.addDataSetListener(this);
+        if (ds instanceof DataSet) {
+            ((DataSet) ds).addDataSetListener(this);
+        }
         MainApplication.getLayerManager().addLayerChangeListener(new LayerChangeListener() {
             @Override
             public void layerRemoving(LayerRemoveEvent e) {
                 if (e.getRemovedLayer() instanceof OsmDataLayer
                         && ((OsmDataLayer) e.getRemovedLayer()).data == ds) {
                     INSTANCES.remove(ds);
-                    ds.removeDataSetListener(AutoCompletionManager.this);
+                    if (ds instanceof DataSet) {
+                        ((DataSet) ds).removeDataSetListener(AutoCompletionManager.this);
+                    }
                     MainApplication.getLayerManager().removeLayerChangeListener(this);
                 }
             }
@@ -506,7 +511,7 @@ public class AutoCompletionManager implements DataSetListener {
      * @return the {@code AutoCompletionManager} for the given data set
      * @since 12758
      */
-    public static AutoCompletionManager of(DataSet dataSet) {
+    public static AutoCompletionManager of(OsmData<?, ?, ?, ?> dataSet) {
         return INSTANCES.computeIfAbsent(dataSet, ds -> new AutoCompletionManager(ds).registerListeners());
     }
 }

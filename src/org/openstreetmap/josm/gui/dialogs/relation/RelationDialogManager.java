@@ -12,6 +12,7 @@ import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
 
+import org.openstreetmap.josm.data.osm.IRelation;
 import org.openstreetmap.josm.data.osm.Relation;
 import org.openstreetmap.josm.gui.MainApplication;
 import org.openstreetmap.josm.gui.layer.Layer;
@@ -49,10 +50,10 @@ public class RelationDialogManager extends WindowAdapter implements LayerChangeL
      *
      */
     private static class DialogContext {
-        public final Relation relation;
+        public final IRelation<?> relation;
         public final OsmDataLayer layer;
 
-        DialogContext(OsmDataLayer layer, Relation relation) {
+        DialogContext(OsmDataLayer layer, IRelation<?> relation) {
             this.layer = layer;
             this.relation = relation;
         }
@@ -140,7 +141,7 @@ public class RelationDialogManager extends WindowAdapter implements LayerChangeL
      * @return true if there is an open relation editor for the relation managed
      * by the given layer; false otherwise
      */
-    public boolean isOpenInEditor(OsmDataLayer layer, Relation relation) {
+    public boolean isOpenInEditor(OsmDataLayer layer, IRelation<?> relation) {
         if (relation == null) return false;
         DialogContext context = new DialogContext(layer, relation);
         return openDialogs.containsKey(context);
@@ -155,9 +156,9 @@ public class RelationDialogManager extends WindowAdapter implements LayerChangeL
      * @return the editor for the relation managed by layer. Null, if no such editor
      * is currently open.
      *
-     * @see #isOpenInEditor(OsmDataLayer, Relation)
+     * @see #isOpenInEditor(OsmDataLayer, IRelation)
      */
-    public RelationEditor getEditorForRelation(OsmDataLayer layer, Relation relation) {
+    public RelationEditor getEditorForRelation(OsmDataLayer layer, IRelation<?> relation) {
         if (relation == null) return null;
         DialogContext context = new DialogContext(layer, relation);
         return openDialogs.get(context);

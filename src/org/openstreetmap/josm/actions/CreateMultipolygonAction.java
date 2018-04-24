@@ -204,7 +204,7 @@ public class CreateMultipolygonAction extends JosmAction {
         Set<Way> ways = new HashSet<>(selectedWays);
         ways.addAll(selectedMultipolygonRelation.getMemberPrimitives(Way.class));
 
-        final MultipolygonBuilder polygon = analyzeWays(ways, true);
+        final MultipolygonBuilder<Way> polygon = analyzeWays(ways, true);
         if (polygon == null) {
             return null; //could not make multipolygon.
         } else {
@@ -220,7 +220,7 @@ public class CreateMultipolygonAction extends JosmAction {
      */
     public static Pair<Relation, Relation> createMultipolygonRelation(Collection<Way> selectedWays, boolean showNotif) {
 
-        final MultipolygonBuilder polygon = analyzeWays(selectedWays, showNotif);
+        final MultipolygonBuilder<Way> polygon = analyzeWays(selectedWays, showNotif);
         if (polygon == null) {
             return null; //could not make multipolygon.
         } else {
@@ -287,9 +287,9 @@ public class CreateMultipolygonAction extends JosmAction {
      * @param showNotif if {@code true}, shows a notification if an error occurs
      * @return <code>null</code>, if there was a problem with the ways.
      */
-    private static MultipolygonBuilder analyzeWays(Collection<Way> selectedWays, boolean showNotif) {
+    private static MultipolygonBuilder<Way> analyzeWays(Collection<Way> selectedWays, boolean showNotif) {
 
-        MultipolygonBuilder pol = new MultipolygonBuilder();
+        MultipolygonBuilder<Way> pol = new MultipolygonBuilder<>();
         final String error = pol.makeFromWays(selectedWays);
 
         if (error != null) {
@@ -311,16 +311,16 @@ public class CreateMultipolygonAction extends JosmAction {
      * @param clone relation to clone, can be null
      * @return multipolygon relation
      */
-    private static Relation createRelation(MultipolygonBuilder pol, Relation clone) {
+    private static Relation createRelation(MultipolygonBuilder<Way> pol, Relation clone) {
         // Create new relation
         Relation rel = clone != null ? new Relation(clone) : new Relation();
         rel.put("type", "multipolygon");
         // Add ways to it
-        for (JoinedPolygon jway:pol.outerWays) {
+        for (JoinedPolygon<Way> jway:pol.outerWays) {
             addMembers(jway, rel, "outer");
         }
 
-        for (JoinedPolygon jway:pol.innerWays) {
+        for (JoinedPolygon<Way> jway:pol.innerWays) {
             addMembers(jway, rel, "inner");
         }
 
@@ -331,7 +331,7 @@ public class CreateMultipolygonAction extends JosmAction {
         return rel;
     }
 
-    private static void addMembers(JoinedPolygon polygon, Relation rel, String role) {
+    private static void addMembers(JoinedPolygon<Way> polygon, Relation rel, String role) {
         final int count = rel.getMembersCount();
         final Set<Way> ways = new HashSet<>(polygon.ways);
         for (int i = 0; i < count; i++) {

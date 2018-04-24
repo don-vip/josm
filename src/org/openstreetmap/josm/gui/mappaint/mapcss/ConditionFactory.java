@@ -14,6 +14,7 @@ import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
+import org.openstreetmap.josm.data.osm.IPrimitive;
 import org.openstreetmap.josm.data.osm.Node;
 import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.OsmUtils;
@@ -535,9 +536,9 @@ public final class ConditionFactory {
             case PRIMITIVE:
                 switch (matchType) {
                 case TRUE:
-                    return e.osm.isKeyTrue(label) ^ negateResult;
+                    return OsmUtils.isTrue(e.osm.get(label)) ^ negateResult;
                 case FALSE:
-                    return e.osm.isKeyFalse(label) ^ negateResult;
+                    return OsmUtils.isFalse(e.osm.get(label)) ^ negateResult;
                 case REGEX:
                     return e.osm.keySet().stream().anyMatch(containsPattern) ^ negateResult;
                 default:
@@ -670,17 +671,17 @@ public final class ConditionFactory {
          * {@code :same-tags} tests whether the object has the same tags as its child/parent.
          * @param e MapCSS environment
          * @return {@code true} if the object has the same tags as its child/parent
-         * @see OsmPrimitive#hasSameInterestingTags(OsmPrimitive)
+         * @see OsmPrimitive#hasSameInterestingTags(IPrimitive)
          */
         static boolean sameTags(Environment e) { // NO_UCD (unused code)
             return e.osm.hasSameInterestingTags(Utils.firstNonNull(e.child, e.parent));
         }
 
         /**
-         * {@code :area-style} tests whether the object has an area style. This is useful for validators.
+         * {@code :area-style} tests whether the object has an area style. This can only be used by validators.
          * @param e MapCSS environment
          * @return {@code true} if the object has an area style
-         * @see ElemStyles#hasAreaElemStyle(OsmPrimitive, boolean)
+         * @see ElemStyles#hasAreaElemStyle(IPrimitive, boolean)
          */
         static boolean areaStyle(Environment e) { // NO_UCD (unused code)
             // only for validator
@@ -748,7 +749,7 @@ public final class ConditionFactory {
          * @see InDataSourceArea
          */
         static boolean inDownloadedArea(Environment e) { // NO_UCD (unused code)
-            return IN_DOWNLOADED_AREA.test(e.osm);
+            return e.osm instanceof OsmPrimitive && IN_DOWNLOADED_AREA.test((OsmPrimitive) e.osm);
         }
 
         static boolean completely_downloaded(Environment e) { // NO_UCD (unused code)

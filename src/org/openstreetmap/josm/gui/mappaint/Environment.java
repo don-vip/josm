@@ -1,7 +1,7 @@
 // License: GPL. For details, see LICENSE file.
 package org.openstreetmap.josm.gui.mappaint;
 
-import org.openstreetmap.josm.data.osm.OsmPrimitive;
+import org.openstreetmap.josm.data.osm.IPrimitive;
 import org.openstreetmap.josm.data.osm.Relation;
 import org.openstreetmap.josm.gui.mappaint.mapcss.Condition.Context;
 import org.openstreetmap.josm.gui.mappaint.mapcss.Selector.LinkSelector;
@@ -17,7 +17,7 @@ public class Environment {
     /**
      * The primitive that is currently evaluated
      */
-    public OsmPrimitive osm;
+    public IPrimitive osm;
 
     /**
      * The cascades that are currently evaluated
@@ -42,12 +42,12 @@ public class Environment {
      * If not null, this is the matching parent object if a condition or an expression
      * is evaluated in a {@link LinkSelector} (within a child selector)
      */
-    public OsmPrimitive parent;
+    public IPrimitive parent;
 
     /**
      * The same for parent selector. Only one of the 2 fields (parent or child) is not null in any environment.
      */
-    public OsmPrimitive child;
+    public IPrimitive child;
 
     /**
      * index of node in parent way or member in parent relation. Must be != null in LINK context.
@@ -71,7 +71,7 @@ public class Environment {
      * @param osm OSM primitive
      * @since 8415
      */
-    public Environment(OsmPrimitive osm) {
+    public Environment(IPrimitive osm) {
         this.osm = osm;
     }
 
@@ -82,7 +82,7 @@ public class Environment {
      * @param layer layer
      * @param source style source
      */
-    public Environment(OsmPrimitive osm, MultiCascade mc, String layer, StyleSource source) {
+    public Environment(IPrimitive osm, MultiCascade mc, String layer, StyleSource source) {
         this.osm = osm;
         this.mc = mc;
         this.layer = layer;
@@ -114,7 +114,7 @@ public class Environment {
      * @return A clone of this environment, with the specified primitive
      * @see #osm
      */
-    public Environment withPrimitive(OsmPrimitive osm) {
+    public Environment withPrimitive(IPrimitive osm) {
         Environment e = new Environment(this);
         e.osm = osm;
         return e;
@@ -126,7 +126,7 @@ public class Environment {
      * @return A clone of this environment, with the specified parent
      * @see #parent
      */
-    public Environment withParent(OsmPrimitive parent) {
+    public Environment withParent(IPrimitive parent) {
         Environment e = new Environment(this);
         e.parent = parent;
         return e;
@@ -142,7 +142,7 @@ public class Environment {
      * @see #index
      * @since 6175
      */
-    public Environment withParentAndIndexAndLinkContext(OsmPrimitive parent, int index, int count) {
+    public Environment withParentAndIndexAndLinkContext(IPrimitive parent, int index, int count) {
         Environment e = new Environment(this);
         e.parent = parent;
         e.index = index;
@@ -157,7 +157,7 @@ public class Environment {
      * @return A clone of this environment, with the specified child
      * @see #child
      */
-    public Environment withChild(OsmPrimitive child) {
+    public Environment withChild(IPrimitive child) {
         Environment e = new Environment(this);
         e.child = child;
         return e;
@@ -173,7 +173,7 @@ public class Environment {
      * @see #index
      * @since 6175
      */
-    public Environment withChildAndIndexAndLinkContext(OsmPrimitive child, int index, int count) {
+    public Environment withChildAndIndexAndLinkContext(IPrimitive child, int index, int count) {
         Environment e = new Environment(this);
         e.child = child;
         e.index = index;

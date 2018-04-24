@@ -17,15 +17,14 @@ import java.util.List;
 
 import org.openstreetmap.josm.data.Bounds;
 import org.openstreetmap.josm.data.osm.BBox;
-import org.openstreetmap.josm.data.osm.DataSet;
 import org.openstreetmap.josm.data.osm.INode;
-import org.openstreetmap.josm.data.osm.Node;
-import org.openstreetmap.josm.data.osm.OsmPrimitive;
-import org.openstreetmap.josm.data.osm.Relation;
-import org.openstreetmap.josm.data.osm.RelationMember;
-import org.openstreetmap.josm.data.osm.Way;
+import org.openstreetmap.josm.data.osm.IPrimitive;
+import org.openstreetmap.josm.data.osm.IRelation;
+import org.openstreetmap.josm.data.osm.IRelationMember;
+import org.openstreetmap.josm.data.osm.IWay;
+import org.openstreetmap.josm.data.osm.OsmData;
 import org.openstreetmap.josm.data.osm.WaySegment;
-import org.openstreetmap.josm.data.osm.visitor.OsmPrimitiveVisitor;
+import org.openstreetmap.josm.data.osm.visitor.PrimitiveVisitor;
 import org.openstreetmap.josm.gui.MapViewState.MapViewPoint;
 import org.openstreetmap.josm.gui.MapViewState.MapViewRectangle;
 import org.openstreetmap.josm.gui.NavigatableComponent;
@@ -38,7 +37,7 @@ import org.openstreetmap.josm.tools.Utils;
  * previous set graphic environment.
  * @since 23
  */
-public class WireframeMapRenderer extends AbstractMapRenderer implements OsmPrimitiveVisitor {
+public class WireframeMapRenderer extends AbstractMapRenderer implements PrimitiveVisitor {
 
     /** Color Preference for ways not matching any other group */
     protected Color dfltWayColor;
@@ -84,15 +83,15 @@ public class WireframeMapRenderer extends AbstractMapRenderer implements OsmPrim
     /** Path store to draw subsequent segments of same color as one <code>Path</code>. */
     protected MapPath2D currentPath = new MapPath2D();
     /**
-      * <code>DataSet</code> passed to the @{link render} function to overcome the argument
+      * <code>OsmData</code> passed to the {@link #render} function to overcome the argument
       * limitations of @{link Visitor} interface. Only valid until end of rendering call.
       */
-    private DataSet ds;
+    private OsmData<? extends IPrimitive, ? extends INode, ? extends IWay<?, ?>, ? extends IRelation<?>> ds;
 
     /** Helper variable for {@link #drawSegment} */
     private static final ArrowPaintHelper ARROW_PAINT_HELPER = new ArrowPaintHelper(Utils.toRadians(20), 10);
 
-    /** Helper variable for {@link #visit(Relation)} */
+    /** Helper variable for {@link #visit(IRelation)} */
     private final Stroke relatedWayStroke = new BasicStroke(
             4, BasicStroke.CAP_SQUARE, BasicStroke.JOIN_BEVEL);
     private MapViewRectangle viewClip;
@@ -152,7 +151,8 @@ public class WireframeMapRenderer extends AbstractMapRenderer implements OsmPrim
     }
 
     @Override
-    public void render(DataSet data, boolean virtual, Bounds bounds) {
+    public void render(OsmData<? extends IPrimitive, ? extends INode, ? extends IWay<?, ?>, ? extends IRelation<?>> data,
+            boolean virtual, Bounds bounds) {
         BBox bbox = bounds.toBBox();
         this.ds = data;
         Rectangle clip = g.getClipBounds();
@@ -160,17 +160,17 @@ public class WireframeMapRenderer extends AbstractMapRenderer implements OsmPrim
         viewClip = mapState.getViewArea(clip);
         getSettings(virtual);
 
-        for (final Relation rel : data.searchRelations(bbox)) {
+        for (final IRelation<?> rel : data.searchRelations(bbox)) {
             if (rel.isDrawable() && !ds.isSelected(rel) && !rel.isDisabledAndHidden()) {
                 rel.accept(this);
             }
         }
 
         // draw tagged ways first, then untagged ways, then highlighted ways
-        List<Way> highlightedWays = new ArrayList<>();
-        List<Way> untaggedWays = new ArrayList<>();
+        List<IWay<?, ?>> highlightedWays = new ArrayList<>();
+        List<IWay<?, ?>> untaggedWays = new ArrayList<>();
 
-        for (final Way way : data.searchWays(bbox)) {
+        for (final IWay<?, ?> way : data.searchWays(bbox)) {
             if (way.isDrawable() && !ds.isSelected(way) && !way.isDisabledAndHidden()) {
                 if (way.isHighlighted()) {
                     highlightedWays.add(way);
@@ -184,22 +184,22 @@ public class WireframeMapRenderer extends AbstractMapRenderer implements OsmPrim
         displaySegments();
 
         // Display highlighted ways after the other ones (fix #8276)
-        List<Way> specialWays = new ArrayList<>(untaggedWays);
+        List<IWay<?, ?>> specialWays = new ArrayList<>(untaggedWays);
         specialWays.addAll(highlightedWays);
-        for (final Way way : specialWays) {
+        for (final IWay<?, ?> way : specialWays) {
             way.accept(this);
         }
         specialWays.clear();
         displaySegments();
 
-        for (final OsmPrimitive osm : data.getSelected()) {
+        for (final IPrimitive osm : data.getSelected()) {
             if (osm.isDrawable()) {
                 osm.accept(this);
             }
         }
         displaySegments();
 
-        for (final OsmPrimitive osm: data.searchNodes(bbox)) {
+        for (final IPrimitive osm: data.searchNodes(bbox)) {
             if (osm.isDrawable() && !ds.isSelected(osm) && !osm.isDisabledAndHidden()) {
                 osm.accept(this);
             }
@@ -236,7 +236,7 @@ public class WireframeMapRenderer extends AbstractMapRenderer implements OsmPrim
      * @param n The node to draw.
      */
     @Override
-    public void visit(Node n) {
+    public void visit(INode n) {
         if (n.isIncomplete()) return;
 
         if (n.isHighlighted()) {
@@ -278,7 +278,7 @@ public class WireframeMapRenderer extends AbstractMapRenderer implements OsmPrim
         }
     }
 
-    private static boolean isNodeTagged(Node n) {
+    private static boolean isNodeTagged(INode n) {
         return n.isTagged() || n.isAnnotated();
     }
 
@@ -287,7 +287,7 @@ public class WireframeMapRenderer extends AbstractMapRenderer implements OsmPrim
      * @param w The way to draw.
      */
     @Override
-    public void visit(Way w) {
+    public void visit(IWay<?, ?> w) {
         if (w.isIncomplete() || w.getNodesCount() < 2)
             return;
 
@@ -314,7 +314,7 @@ public class WireframeMapRenderer extends AbstractMapRenderer implements OsmPrim
             wayColor = dfltWayColor;
         }
 
-        Iterator<Node> it = w.getNodes().iterator();
+        Iterator<? extends INode> it = w.getRealNodes().iterator();
         if (it.hasNext()) {
             MapViewPoint lastP = mapState.getPointFor(it.next());
             int lastPOutside = lastP.getOutsideRectangleFlags(viewClip);
@@ -339,7 +339,7 @@ public class WireframeMapRenderer extends AbstractMapRenderer implements OsmPrim
      * @param r The relation to draw.
      */
     @Override
-    public void visit(Relation r) {
+    public void visit(IRelation<?> r) {
         if (r.isIncomplete()) return;
 
         Color col;
@@ -354,7 +354,7 @@ public class WireframeMapRenderer extends AbstractMapRenderer implements OsmPrim
         }
         g.setColor(col);
 
-        for (RelationMember m : r.getMembers()) {
+        for (IRelationMember<?, ?, ?, ?> m : r.getMembers()) {
             if (m.getMember().isIncomplete() || !m.getMember().isDrawable()) {
                 continue;
             }
@@ -369,7 +369,7 @@ public class WireframeMapRenderer extends AbstractMapRenderer implements OsmPrim
                 GeneralPath path = new GeneralPath();
 
                 boolean first = true;
-                for (Node n : m.getWay().getNodes()) {
+                for (INode n : m.getWay().getRealNodes()) {
                     if (!n.isDrawable()) {
                         continue;
                     }

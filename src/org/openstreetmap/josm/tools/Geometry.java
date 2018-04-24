@@ -24,6 +24,7 @@ import org.openstreetmap.josm.data.coor.EastNorth;
 import org.openstreetmap.josm.data.coor.ILatLon;
 import org.openstreetmap.josm.data.osm.BBox;
 import org.openstreetmap.josm.data.osm.DataSet;
+import org.openstreetmap.josm.data.osm.INode;
 import org.openstreetmap.josm.data.osm.IPrimitive;
 import org.openstreetmap.josm.data.osm.MultipolygonBuilder;
 import org.openstreetmap.josm.data.osm.MultipolygonBuilder.JoinedPolygon;
@@ -500,11 +501,11 @@ public final class Geometry {
      * @return Area for the given list of nodes  (EastNorth coordinates)
      * @since 6841
      */
-    public static Area getArea(List<Node> polygon) {
+    public static Area getArea(List<? extends INode> polygon) {
         Path2D path = new Path2D.Double();
 
         boolean begin = true;
-        for (Node n : polygon) {
+        for (INode n : polygon) {
             EastNorth en = n.getEastNorth();
             if (en != null) {
                 if (begin) {
@@ -552,12 +553,12 @@ public final class Geometry {
      * @return Area for the multipolygon (LatLon coordinates)
      */
     public static Area getAreaLatLon(Relation multipolygon) {
-        final Multipolygon mp = MultipolygonCache.getInstance().get(multipolygon);
+        final Multipolygon<?> mp = MultipolygonCache.getInstance().get(multipolygon);
         Path2D path = new Path2D.Double();
         path.setWindingRule(Path2D.WIND_EVEN_ODD);
-        for (Multipolygon.PolyData pd : mp.getCombinedPolygons()) {
+        for (Multipolygon.PolyData<?> pd : mp.getCombinedPolygons()) {
             buildPath2DLatLon(pd.getNodes(), path);
-            for (Multipolygon.PolyData pdInner : pd.getInners()) {
+            for (Multipolygon.PolyData<?> pdInner : pd.getInners()) {
                 buildPath2DLatLon(pdInner.getNodes(), path);
             }
         }
@@ -570,7 +571,7 @@ public final class Geometry {
      * @param second List of nodes forming second polygon
      * @return intersection kind
      */
-    public static PolygonIntersection polygonIntersection(List<Node> first, List<Node> second) {
+    public static PolygonIntersection polygonIntersection(List<? extends INode> first, List<? extends INode> second) {
         Area a1 = getArea(first);
         Area a2 = getArea(second);
         return polygonIntersection(a1, a2);
@@ -618,21 +619,21 @@ public final class Geometry {
      * @param point the point to test
      * @return true if the point is inside polygon.
      */
-    public static boolean nodeInsidePolygon(Node point, List<Node> polygonNodes) {
+    public static boolean nodeInsidePolygon(INode point, List<? extends INode> polygonNodes) {
         if (polygonNodes.size() < 2)
             return false;
 
         //iterate each side of the polygon, start with the last segment
-        Node oldPoint = polygonNodes.get(polygonNodes.size() - 1);
+        INode oldPoint = polygonNodes.get(polygonNodes.size() - 1);
 
         if (!oldPoint.isLatLonKnown()) {
             return false;
         }
 
         boolean inside = false;
-        Node p1, p2;
+        INode p1, p2;
 
-        for (Node newPoint : polygonNodes) {
+        for (INode newPoint : polygonNodes) {
             //skip duplicate points
             if (newPoint.equals(oldPoint)) {
                 continue;
@@ -690,8 +691,8 @@ public final class Geometry {
      */
     public static double multipolygonArea(Relation multipolygon) {
         double area = 0.0;
-        final Multipolygon mp = MultipolygonCache.getInstance().get(multipolygon);
-        for (Multipolygon.PolyData pd : mp.getCombinedPolygons()) {
+        final Multipolygon<?> mp = MultipolygonCache.getInstance().get(multipolygon);
+        for (Multipolygon.PolyData<?> pd : mp.getCombinedPolygons()) {
             area += pd.getAreaAndPerimeter(Projections.getProjectionByCode("EPSG:54008")).getArea();
         }
         return area;
@@ -919,7 +920,7 @@ public final class Geometry {
      * @param isOuterWayAMatch allows to decide if the immediate {@code outer} way of the multipolygon is a match
      * @return {@code true} if the node is inside the multipolygon
      */
-    public static boolean isNodeInsideMultiPolygon(Node node, Relation multiPolygon, Predicate<Way> isOuterWayAMatch) {
+    public static boolean isNodeInsideMultiPolygon(INode node, Relation multiPolygon, Predicate<Way> isOuterWayAMatch) {
         return isPolygonInsideMultiPolygon(Collections.singletonList(node), multiPolygon, isOuterWayAMatch);
     }
 
@@ -933,9 +934,9 @@ public final class Geometry {
      * @param isOuterWayAMatch allows to decide if the immediate {@code outer} way of the multipolygon is a match
      * @return {@code true} if the polygon formed by nodes is inside the multipolygon
      */
-    public static boolean isPolygonInsideMultiPolygon(List<Node> nodes, Relation multiPolygon, Predicate<Way> isOuterWayAMatch) {
+    public static boolean isPolygonInsideMultiPolygon(List<? extends INode> nodes, Relation multiPolygon, Predicate<Way> isOuterWayAMatch) {
         // Extract outer/inner members from multipolygon
-        final Pair<List<JoinedPolygon>, List<JoinedPolygon>> outerInner;
+        final Pair<List<JoinedPolygon<Way>>, List<JoinedPolygon<Way>>> outerInner;
         try {
             outerInner = MultipolygonBuilder.joinWays(multiPolygon);
         } catch (MultipolygonBuilder.JoinedPolygonCreationException ex) {
@@ -944,14 +945,14 @@ public final class Geometry {
             return false;
         }
         // Test if object is inside an outer member
-        for (JoinedPolygon out : outerInner.a) {
+        for (JoinedPolygon<Way> out : outerInner.a) {
             if (nodes.size() == 1
                     ? nodeInsidePolygon(nodes.get(0), out.getNodes())
                     : EnumSet.of(PolygonIntersection.FIRST_INSIDE_SECOND, PolygonIntersection.CROSSING).contains(
                             polygonIntersection(nodes, out.getNodes()))) {
                 boolean insideInner = false;
                 // If inside an outer, check it is not inside an inner
-                for (JoinedPolygon in : outerInner.b) {
+                for (JoinedPolygon<Way> in : outerInner.b) {
                     if (polygonIntersection(in.getNodes(), out.getNodes()) == PolygonIntersection.FIRST_INSIDE_SECOND
                             && (nodes.size() == 1
                             ? nodeInsidePolygon(nodes.get(0), in.getNodes())

@@ -8,26 +8,42 @@ import org.openstreetmap.josm.tools.CheckParameterUtil;
 
 /**
  * This is the data (role, type and id) that is stored in the database for a given relation member.
+ * @since 2284
  */
-public class RelationMemberData implements PrimitiveId, Serializable {
+public class RelationMemberData implements IRelationMember<PrimitiveData, NodeData, WayData, RelationData>, Serializable {
 
     private static final long serialVersionUID = 381392198209333319L;
     private final String role;
     private final long memberId;
     private final OsmPrimitiveType memberType;
+    private final OsmData<PrimitiveData, ?, ?, ?> dataSet;
 
     /**
-     * Constructs a new {@code RelationMemberData}.
+     * Constructs a new {@code RelationMemberData} without data set.
      * @param role member role - can be null
      * @param type member type - cannot be null
      * @param id member id - cannot be null
      * @throws IllegalArgumentException is type or id is null
      */
     public RelationMemberData(String role, OsmPrimitiveType type, long id) {
+        this(role, type, id, null);
+    }
+
+    /**
+     * Constructs a new {@code RelationMemberData} with data set.
+     * @param role member role - can be null
+     * @param type member type - cannot be null
+     * @param id member id - cannot be null
+     * @param dataSet data set - can be null
+     * @throws IllegalArgumentException is type or id is null
+     * @since xxx
+     */
+    public RelationMemberData(String role, OsmPrimitiveType type, long id, OsmData<PrimitiveData, ?, ?, ?> dataSet) {
         CheckParameterUtil.ensureParameterNotNull(type, "type");
         this.role = role == null ? "" : role;
         this.memberType = type;
         this.memberId = id;
+        this.dataSet = dataSet;
     }
 
     /**
@@ -48,10 +64,7 @@ public class RelationMemberData implements PrimitiveId, Serializable {
         return memberId;
     }
 
-    /**
-     * Get member role.
-     * @return member role
-     */
+    @Override
     public String getRole() {
         return role;
     }
@@ -64,12 +77,29 @@ public class RelationMemberData implements PrimitiveId, Serializable {
         return memberType;
     }
 
-    /**
-     * Determines if this member has a role.
-     * @return {@code true} if this member has a role
-     */
-    public boolean hasRole() {
-        return !"".equals(role);
+    @Override
+    public boolean isNode() {
+        return OsmPrimitiveType.NODE == memberType;
+    }
+
+    @Override
+    public boolean isWay() {
+        return OsmPrimitiveType.WAY == memberType;
+    }
+
+    @Override
+    public boolean isRelation() {
+        return OsmPrimitiveType.RELATION == memberType;
+    }
+
+    @Override
+    public PrimitiveData getMember() {
+        return dataSet != null ? dataSet.getPrimitiveById(memberId, memberType) : null;
+    }
+
+    @Override
+    public OsmData<?, ?, ?, ?> getDataSet() {
+        return dataSet;
     }
 
     @Override

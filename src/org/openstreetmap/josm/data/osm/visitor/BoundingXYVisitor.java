@@ -9,41 +9,41 @@ import org.openstreetmap.josm.data.ProjectionBounds;
 import org.openstreetmap.josm.data.coor.EastNorth;
 import org.openstreetmap.josm.data.coor.ILatLon;
 import org.openstreetmap.josm.data.coor.LatLon;
-import org.openstreetmap.josm.data.osm.Node;
-import org.openstreetmap.josm.data.osm.OsmPrimitive;
-import org.openstreetmap.josm.data.osm.Relation;
-import org.openstreetmap.josm.data.osm.RelationMember;
-import org.openstreetmap.josm.data.osm.Way;
+import org.openstreetmap.josm.data.osm.INode;
+import org.openstreetmap.josm.data.osm.IPrimitive;
+import org.openstreetmap.josm.data.osm.IRelation;
+import org.openstreetmap.josm.data.osm.IRelationMember;
+import org.openstreetmap.josm.data.osm.IWay;
 import org.openstreetmap.josm.gui.MainApplication;
 import org.openstreetmap.josm.gui.MapFrame;
 import org.openstreetmap.josm.spi.preferences.Config;
 
 /**
- * Calculates the total bounding rectangle of a series of {@link OsmPrimitive} objects, using the
+ * Calculates the total bounding rectangle of a series of {@link IPrimitive} objects, using the
  * EastNorth values as reference.
  * @author imi
  */
-public class BoundingXYVisitor implements OsmPrimitiveVisitor {
+public class BoundingXYVisitor implements PrimitiveVisitor {
 
     private ProjectionBounds bounds;
 
     @Override
-    public void visit(Node n) {
+    public void visit(INode n) {
         visit((ILatLon) n);
     }
 
     @Override
-    public void visit(Way w) {
+    public void visit(IWay<?, ?> w) {
         if (w.isIncomplete()) return;
-        for (Node n : w.getNodes()) {
+        for (INode n : w.getRealNodes()) {
             visit(n);
         }
     }
 
     @Override
-    public void visit(Relation e) {
+    public void visit(IRelation<?> e) {
         // only use direct members
-        for (RelationMember m : e.getMembers()) {
+        for (IRelationMember<?, ?, ?, ?> m : e.getMembers()) {
             if (!m.isRelation()) {
                 m.getMember().accept(this);
             }
@@ -219,9 +219,9 @@ public class BoundingXYVisitor implements OsmPrimitiveVisitor {
      * Compute the bounding box of a collection of primitives.
      * @param primitives the collection of primitives
      */
-    public void computeBoundingBox(Collection<? extends OsmPrimitive> primitives) {
+    public void computeBoundingBox(Collection<? extends IPrimitive> primitives) {
         if (primitives == null) return;
-        for (OsmPrimitive p: primitives) {
+        for (IPrimitive p: primitives) {
             if (p == null) {
                 continue;
             }

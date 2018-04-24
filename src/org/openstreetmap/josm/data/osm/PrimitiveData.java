@@ -8,17 +8,22 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
+import org.openstreetmap.josm.data.osm.visitor.PrimitiveVisitor;
 import org.openstreetmap.josm.gui.mappaint.StyleCache;
 
 /**
- * This class can be used to save properties of OsmPrimitive.
+ * This class can be used to save properties of {@link OsmPrimitive}.
  *
- * The main difference between PrimitiveData
- * and OsmPrimitive is that PrimitiveData is not part of the dataset and changes in PrimitiveData are not
- * reported by events
+ * The main difference between {@code PrimitiveData} and {@code OsmPrimitive} is that
+ * {@code PrimitiveData} is not part of the {@link DataSet} and changes in {@code PrimitiveData}
+ * are not reported by events.
+ *
+ * @since 2284
  */
 public abstract class PrimitiveData extends AbstractPrimitive implements Serializable {
 
@@ -133,6 +138,11 @@ public abstract class PrimitiveData extends AbstractPrimitive implements Seriali
     }
 
     @Override
+    public OsmData<?, ?, ?, ?> getDataSet() {
+        return null;
+    }
+
+    @Override
     public boolean isTagged() {
         return hasKeys();
     }
@@ -163,6 +173,16 @@ public abstract class PrimitiveData extends AbstractPrimitive implements Seriali
     }
 
     @Override
+    public final List<IPrimitive> getIReferrers() {
+        return Collections.emptyList();
+    }
+
+    @Override
+    public void visitReferrers(PrimitiveVisitor visitor) {
+        // Override if needed
+    }
+
+    @Override
     public StyleCache getCachedStyle() {
         return null;
     }
@@ -181,4 +201,12 @@ public abstract class PrimitiveData extends AbstractPrimitive implements Seriali
     public void declareCachedStyleUpToDate() {
         // Override if needed
     }
+
+    /**
+     * If necessary, extend the bbox to contain this primitive
+     * @param box a bbox instance
+     * @param visited a set of visited members or null
+     * @since xxx
+     */
+    protected abstract void addToBBox(BBox box, Set<PrimitiveId> visited);
 }

@@ -33,10 +33,11 @@ import org.openstreetmap.josm.tools.Utils;
 /**
  * Helper class to build multipolygons from multiple ways.
  * @author viesturs
+ * @param <W> type of OSM way
  * @since 7392 (rename)
  * @since 3704
  */
-public class MultipolygonBuilder {
+public class MultipolygonBuilder<W extends IWay<?, ?>> {
 
     private static final ForkJoinPool THREAD_POOL = newForkJoinPool();
 
@@ -55,11 +56,12 @@ public class MultipolygonBuilder {
      * If the intersection between polygons a and b was calculated we also know
      * the result of intersection between b and a. The lookup in the hash tables is
      * much faster than the intersection calculation.
+     * @param <W> type of OSM way
      */
-    private static class IntersectionMatrix {
-        private final Map<Pair<JoinedPolygon, JoinedPolygon>, PolygonIntersection> results;
+    private static class IntersectionMatrix<W extends IWay<?, ?>> {
+        private final Map<Pair<JoinedPolygon<W>, JoinedPolygon<W>>, PolygonIntersection> results;
 
-        IntersectionMatrix(Collection<JoinedPolygon> polygons) {
+        IntersectionMatrix(Collection<JoinedPolygon<W>> polygons) {
             results = new HashMap<>(Utils.hashMapInitialCapacity(polygons.size() * polygons.size()));
         }
 
@@ -89,7 +91,7 @@ public class MultipolygonBuilder {
          * @return the intersection between two polygons
          * @see Map#computeIfAbsent
          */
-        PolygonIntersection computeIfAbsent(JoinedPolygon a1, JoinedPolygon a2, Supplier<PolygonIntersection> computation) {
+        PolygonIntersection computeIfAbsent(JoinedPolygon<W> a1, JoinedPolygon<W> a2, Supplier<PolygonIntersection> computation) {
             PolygonIntersection intersection = results.get(Pair.create(a1, a2));
             if (intersection == null) {
                 intersection = computation.get();
@@ -105,11 +107,12 @@ public class MultipolygonBuilder {
 
     /**
      * Represents one polygon that consists of multiple ways.
+     * @param <W> type of OSM way
      */
-    public static class JoinedPolygon {
-        public final List<Way> ways;
+    public static class JoinedPolygon<W extends IWay<?, ?>> {
+        public final List<W> ways;
         public final List<Boolean> reversed;
-        public final List<Node> nodes;
+        public final List<INode> nodes;
         public final Area area;
         public final Rectangle bounds;
 
@@ -118,7 +121,7 @@ public class MultipolygonBuilder {
          * @param ways The ways used to build joined polygon
          * @param reversed list of reversed states
          */
-        public JoinedPolygon(List<Way> ways, List<Boolean> reversed) {
+        public JoinedPolygon(List<W> ways, List<Boolean> reversed) {
             this.ways = ways;
             this.reversed = reversed;
             this.nodes = this.getNodes();
@@ -130,7 +133,7 @@ public class MultipolygonBuilder {
          * Creates a polygon from single way.
          * @param way the way to form the polygon
          */
-        public JoinedPolygon(Way way) {
+        public JoinedPolygon(W way) {
             this(Collections.singletonList(way), Collections.singletonList(Boolean.FALSE));
         }
 
@@ -138,11 +141,11 @@ public class MultipolygonBuilder {
          * Builds a list of nodes for this polygon. First node is not duplicated as last node.
          * @return list of nodes
          */
-        public List<Node> getNodes() {
-            List<Node> nodes = new ArrayList<>();
+        public List<INode> getNodes() {
+            List<INode> nodes = new ArrayList<>();
 
             for (int waypos = 0; waypos < this.ways.size(); waypos++) {
-                Way way = this.ways.get(waypos);
+                W way = this.ways.get(waypos);
                 boolean reversed = this.reversed.get(waypos).booleanValue();
 
                 if (!reversed) {
@@ -162,14 +165,15 @@ public class MultipolygonBuilder {
 
     /**
      * Helper storage class for finding findOuterWays
+     * @param <W> Type of OSM way
      */
-    static class PolygonLevel {
+    static class PolygonLevel<W extends IWay<?, ?>> {
         public final int level; // nesting level, even for outer, odd for inner polygons.
-        public final JoinedPolygon outerWay;
+        public final JoinedPolygon<W> outerWay;
 
-        public List<JoinedPolygon> innerWays;
+        public List<JoinedPolygon<W>> innerWays;
 
-        PolygonLevel(JoinedPolygon pol, int level) {
+        PolygonLevel(JoinedPolygon<W> pol, int level) {
             this.outerWay = pol;
             this.level = level;
             this.innerWays = new ArrayList<>();
@@ -177,16 +181,16 @@ public class MultipolygonBuilder {
     }
 
     /** List of outer ways **/
-    public final List<JoinedPolygon> outerWays;
+    public final List<JoinedPolygon<W>> outerWays;
     /** List of inner ways **/
-    public final List<JoinedPolygon> innerWays;
+    public final List<JoinedPolygon<W>> innerWays;
 
     /**
      * Constructs a new {@code MultipolygonBuilder} initialized with given ways.
      * @param outerWays The outer ways
      * @param innerWays The inner ways
      */
-    public MultipolygonBuilder(List<JoinedPolygon> outerWays, List<JoinedPolygon> innerWays) {
+    public MultipolygonBuilder(List<JoinedPolygon<W>> outerWays, List<JoinedPolygon<W>> innerWays) {
         this.outerWays = outerWays;
         this.innerWays = innerWays;
     }
@@ -205,11 +209,10 @@ public class MultipolygonBuilder {
      * @param ways ways to analyze
      * @return error description if the ways cannot be split, {@code null} if all fine.
      */
-    public String makeFromWays(Collection<Way> ways) {
+    public String makeFromWays(Collection<W> ways) {
         try {
-            List<JoinedPolygon> joinedWays = joinWays(ways);
             //analyze witch way is inside witch outside.
-            return makeFromPolygons(joinedWays);
+            return makeFromPolygons(joinWays(ways));
         } catch (JoinedPolygonCreationException ex) {
             Logging.debug(ex);
             return ex.getMessage();
@@ -232,42 +235,45 @@ public class MultipolygonBuilder {
 
     /**
      * Joins the given {@code multipolygon} to a pair of outer and inner multipolygon rings.
+     * @param <W> type of OSM way
      *
      * @param multipolygon the multipolygon to join.
      * @return a pair of outer and inner multipolygon rings.
      * @throws JoinedPolygonCreationException if the creation fails.
      */
-    public static Pair<List<JoinedPolygon>, List<JoinedPolygon>> joinWays(Relation multipolygon) {
+    public static <W extends IWay<?, ?>> Pair<List<JoinedPolygon<W>>, List<JoinedPolygon<W>>> joinWays(
+            IRelation<? extends IRelationMember<?, ?, W, ?>> multipolygon) {
         CheckParameterUtil.ensureThat(multipolygon.isMultipolygon(), "multipolygon.isMultipolygon");
-        final Map<String, Set<Way>> members = multipolygon.getMembers().stream()
-                .filter(RelationMember::isWay)
-                .collect(Collectors.groupingBy(RelationMember::getRole, Collectors.mapping(RelationMember::getWay, Collectors.toSet())));
-        final List<JoinedPolygon> outerRings = joinWays(members.getOrDefault("outer", Collections.emptySet()));
-        final List<JoinedPolygon> innerRings = joinWays(members.getOrDefault("inner", Collections.emptySet()));
+        final Map<String, Set<W>> members = multipolygon.getMembers().stream()
+                .filter(IRelationMember::isWay)
+                .collect(Collectors.groupingBy(IRelationMember::getRole, Collectors.mapping(IRelationMember::getWay, Collectors.toSet())));
+        final List<JoinedPolygon<W>> outerRings = joinWays(members.getOrDefault("outer", Collections.emptySet()));
+        final List<JoinedPolygon<W>> innerRings = joinWays(members.getOrDefault("inner", Collections.emptySet()));
         return Pair.create(outerRings, innerRings);
     }
 
     /**
      * Joins the given {@code ways} to multipolygon rings.
+     * @param <W> type of OSM way
      * @param ways the ways to join.
      * @return a list of multipolygon rings.
      * @throws JoinedPolygonCreationException if the creation fails.
      */
-    public static List<JoinedPolygon> joinWays(Collection<Way> ways) {
-        List<JoinedPolygon> joinedWays = new ArrayList<>();
+    public static <W extends IWay<?, ?>> List<JoinedPolygon<W>> joinWays(Collection<W> ways) {
+        List<JoinedPolygon<W>> joinedWays = new ArrayList<>();
 
         //collect ways connecting to each node.
-        MultiMap<Node, Way> nodesWithConnectedWays = new MultiMap<>();
-        Set<Way> usedWays = new HashSet<>();
+        MultiMap<INode, W> nodesWithConnectedWays = new MultiMap<>();
+        Set<W> usedWays = new HashSet<>();
 
-        for (Way w: ways) {
+        for (W w: ways) {
             if (w.getNodesCount() < 2) {
                 throw new JoinedPolygonCreationException(tr("Cannot add a way with only {0} nodes.", w.getNodesCount()));
             }
 
             if (w.isClosed()) {
                 //closed way, add as is.
-                JoinedPolygon jw = new JoinedPolygon(w);
+                JoinedPolygon<W> jw = new JoinedPolygon<>(w);
                 joinedWays.add(jw);
                 usedWays.add(w);
             } else {
@@ -277,21 +283,21 @@ public class MultipolygonBuilder {
         }
 
         //process unclosed ways
-        for (Way startWay: ways) {
+        for (W startWay: ways) {
             if (usedWays.contains(startWay)) {
                 continue;
             }
 
-            Node startNode = startWay.firstNode();
-            List<Way> collectedWays = new ArrayList<>();
+            INode startNode = startWay.firstNode();
+            List<W> collectedWays = new ArrayList<>();
             List<Boolean> collectedWaysReverse = new ArrayList<>();
-            Way curWay = startWay;
-            Node prevNode = startNode;
+            W curWay = startWay;
+            INode prevNode = startNode;
 
             //find polygon ways
             while (true) {
                 boolean curWayReverse = prevNode == curWay.lastNode();
-                Node nextNode = curWayReverse ? curWay.firstNode() : curWay.lastNode();
+                INode nextNode = curWayReverse ? curWay.firstNode() : curWay.lastNode();
 
                 //add cur way to the list
                 collectedWays.add(curWay);
@@ -303,14 +309,14 @@ public class MultipolygonBuilder {
                 }
 
                 //find next way
-                Collection<Way> adjacentWays = nodesWithConnectedWays.get(nextNode);
+                Collection<W> adjacentWays = nodesWithConnectedWays.get(nextNode);
 
                 if (adjacentWays.size() != 2) {
                     throw new JoinedPolygonCreationException(tr("Each node must connect exactly 2 ways"));
                 }
 
-                Way nextWay = null;
-                for (Way way: adjacentWays) {
+                W nextWay = null;
+                for (W way: adjacentWays) {
                     if (way != curWay) {
                         nextWay = way;
                     }
@@ -322,7 +328,7 @@ public class MultipolygonBuilder {
             }
 
             usedWays.addAll(collectedWays);
-            joinedWays.add(new JoinedPolygon(collectedWays, collectedWaysReverse));
+            joinedWays.add(new JoinedPolygon<>(collectedWays, collectedWaysReverse));
         }
 
         return joinedWays;
@@ -333,8 +339,8 @@ public class MultipolygonBuilder {
      * @param polygons polygons to analyze
      * @return error description if the ways cannot be split, {@code null} if all fine.
      */
-    private String makeFromPolygons(List<JoinedPolygon> polygons) {
-        List<PolygonLevel> list = findOuterWaysMultiThread(polygons);
+    private String makeFromPolygons(List<JoinedPolygon<W>> polygons) {
+        List<PolygonLevel<W>> list = findOuterWaysMultiThread(polygons);
 
         if (list == null) {
             return tr("There is an intersection between ways.");
@@ -344,7 +350,7 @@ public class MultipolygonBuilder {
         this.innerWays.clear();
 
         //take every other level
-        for (PolygonLevel pol : list) {
+        for (PolygonLevel<W> pol : list) {
             if (pol.level % 2 == 0) {
                 this.outerWays.add(pol.outerWay);
             } else {
@@ -355,12 +361,12 @@ public class MultipolygonBuilder {
         return null;
     }
 
-    private static Pair<Boolean, List<JoinedPolygon>> findInnerWaysCandidates(IntersectionMatrix cache,
-            JoinedPolygon outerWay, Collection<JoinedPolygon> boundaryWays) {
+    private static <W extends IWay<?, ?>> Pair<Boolean, List<JoinedPolygon<W>>> findInnerWaysCandidates(
+            IntersectionMatrix<W> cache, JoinedPolygon<W> outerWay, Collection<JoinedPolygon<W>> boundaryWays) {
         boolean outerGood = true;
-        List<JoinedPolygon> innerCandidates = new ArrayList<>();
+        List<JoinedPolygon<W>> innerCandidates = new ArrayList<>();
 
-        for (JoinedPolygon innerWay : boundaryWays) {
+        for (JoinedPolygon<W> innerWay : boundaryWays) {
             if (innerWay == outerWay) {
                 continue;
             }
@@ -388,32 +394,34 @@ public class MultipolygonBuilder {
 
     /**
      * Collects outer way and corresponding inner ways from all boundaries.
+     * @param <W> type of OSM way
      * @param boundaryWays boundary ways
      * @return the outermostWay, or {@code null} if intersection found.
      */
-    private static List<PolygonLevel> findOuterWaysMultiThread(List<JoinedPolygon> boundaryWays) {
-        final IntersectionMatrix cache = new IntersectionMatrix(boundaryWays);
+    private static <W extends IWay<?, ?>> List<PolygonLevel<W>> findOuterWaysMultiThread(List<JoinedPolygon<W>> boundaryWays) {
+        final IntersectionMatrix<W> cache = new IntersectionMatrix<>(boundaryWays);
         if (THREAD_POOL != null) {
-            return THREAD_POOL.invoke(new Worker(cache, boundaryWays, 0, boundaryWays.size(), new ArrayList<PolygonLevel>(),
+            return THREAD_POOL.invoke(new Worker<>(cache, boundaryWays, 0, boundaryWays.size(), new ArrayList<PolygonLevel<W>>(),
                     Math.max(32, boundaryWays.size() / THREAD_POOL.getParallelism() / 3)));
         } else {
-            return new Worker(cache, boundaryWays, 0, boundaryWays.size(), new ArrayList<PolygonLevel>(), 0).computeDirectly();
+            return new Worker<>(cache, boundaryWays, 0, boundaryWays.size(), new ArrayList<PolygonLevel<W>>(), 0).computeDirectly();
         }
     }
 
-    private static class Worker extends RecursiveTask<List<PolygonLevel>> {
+    private static class Worker<W extends IWay<?, ?>> extends RecursiveTask<List<PolygonLevel<W>>> {
 
         // Needed for Findbugs / Coverity because parent class is serializable
         private static final long serialVersionUID = 1L;
 
-        private final transient List<JoinedPolygon> input;
+        private final transient List<JoinedPolygon<W>> input;
         private final int from;
         private final int to;
-        private final transient List<PolygonLevel> output;
+        private final transient List<PolygonLevel<W>> output;
         private final int directExecutionTaskSize;
-        private final IntersectionMatrix cache;
+        private final IntersectionMatrix<W> cache;
 
-        Worker(IntersectionMatrix cache, List<JoinedPolygon> input, int from, int to, List<PolygonLevel> output, int directExecutionTaskSize) {
+        Worker(IntersectionMatrix<W> cache, List<JoinedPolygon<W>> input, int from, int to, List<PolygonLevel<W>> output,
+                int directExecutionTaskSize) {
             this.cache = cache;
             this.input = input;
             this.from = from;
@@ -424,16 +432,18 @@ public class MultipolygonBuilder {
 
         /**
          * Collects outer way and corresponding inner ways from all boundaries.
+         * @param <W> type of OSM way
          * @param level nesting level
          * @param cache cache that tracks previously calculated results
          * @param boundaryWays boundary ways
          * @return the outermostWay, or {@code null} if intersection found.
          */
-        private static List<PolygonLevel> findOuterWaysRecursive(int level, IntersectionMatrix cache, List<JoinedPolygon> boundaryWays) {
+        private static <W extends IWay<?, ?>> List<PolygonLevel<W>> findOuterWaysRecursive(
+                int level, IntersectionMatrix<W> cache, List<JoinedPolygon<W>> boundaryWays) {
 
-            final List<PolygonLevel> result = new ArrayList<>();
+            final List<PolygonLevel<W>> result = new ArrayList<>();
 
-            for (JoinedPolygon outerWay : boundaryWays) {
+            for (JoinedPolygon<W> outerWay : boundaryWays) {
                 if (processOuterWay(level, cache, boundaryWays, result, outerWay) == null) {
                     return null;
                 }
@@ -442,9 +452,10 @@ public class MultipolygonBuilder {
             return result;
         }
 
-        private static List<PolygonLevel> processOuterWay(int level, IntersectionMatrix cache, List<JoinedPolygon> boundaryWays,
-                final List<PolygonLevel> result, JoinedPolygon outerWay) {
-            Pair<Boolean, List<JoinedPolygon>> p = findInnerWaysCandidates(cache, outerWay, boundaryWays);
+        private static <W extends IWay<?, ?>> List<PolygonLevel<W>> processOuterWay(
+                int level, IntersectionMatrix<W> cache, List<JoinedPolygon<W>> boundaryWays,
+                final List<PolygonLevel<W>> result, JoinedPolygon<W> outerWay) {
+            Pair<Boolean, List<JoinedPolygon<W>>> p = findInnerWaysCandidates(cache, outerWay, boundaryWays);
             if (p == null) {
                 // ways intersect
                 return null;
@@ -452,18 +463,18 @@ public class MultipolygonBuilder {
 
             if (p.a) {
                 //add new outer polygon
-                PolygonLevel pol = new PolygonLevel(outerWay, level);
+                PolygonLevel<W> pol = new PolygonLevel<>(outerWay, level);
 
                 //process inner ways
                 if (!p.b.isEmpty()) {
-                    List<PolygonLevel> innerList = findOuterWaysRecursive(level + 1, cache, p.b);
+                    List<PolygonLevel<W>> innerList = findOuterWaysRecursive(level + 1, cache, p.b);
                     if (innerList == null) {
                         return null; //intersection found
                     }
 
                     result.addAll(innerList);
 
-                    for (PolygonLevel pl : innerList) {
+                    for (PolygonLevel<W> pl : innerList) {
                         if (pl.level == level + 1) {
                             pol.innerWays.add(pl.outerWay);
                         }
@@ -476,17 +487,17 @@ public class MultipolygonBuilder {
         }
 
         @Override
-        protected List<PolygonLevel> compute() {
+        protected List<PolygonLevel<W>> compute() {
             if (to - from <= directExecutionTaskSize) {
                 return computeDirectly();
             } else {
-                final Collection<ForkJoinTask<List<PolygonLevel>>> tasks = new ArrayList<>();
+                final Collection<ForkJoinTask<List<PolygonLevel<W>>>> tasks = new ArrayList<>();
                 for (int fromIndex = from; fromIndex < to; fromIndex += directExecutionTaskSize) {
-                    tasks.add(new Worker(cache, input, fromIndex, Math.min(fromIndex + directExecutionTaskSize, to),
-                            new ArrayList<PolygonLevel>(), directExecutionTaskSize));
+                    tasks.add(new Worker<>(cache, input, fromIndex, Math.min(fromIndex + directExecutionTaskSize, to),
+                            new ArrayList<PolygonLevel<W>>(), directExecutionTaskSize));
                 }
-                for (ForkJoinTask<List<PolygonLevel>> task : ForkJoinTask.invokeAll(tasks)) {
-                    List<PolygonLevel> res = task.join();
+                for (ForkJoinTask<List<PolygonLevel<W>>> task : ForkJoinTask.invokeAll(tasks)) {
+                    List<PolygonLevel<W>> res = task.join();
                     if (res == null) {
                         return null;
                     }
@@ -496,7 +507,7 @@ public class MultipolygonBuilder {
             }
         }
 
-        List<PolygonLevel> computeDirectly() {
+        List<PolygonLevel<W>> computeDirectly() {
             for (int i = from; i < to; i++) {
                 if (processOuterWay(0, cache, input, output, input.get(i)) == null) {
                     return null;

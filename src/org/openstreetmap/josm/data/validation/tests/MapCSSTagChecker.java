@@ -35,6 +35,7 @@ import org.openstreetmap.josm.command.Command;
 import org.openstreetmap.josm.command.DeleteCommand;
 import org.openstreetmap.josm.command.SequenceCommand;
 import org.openstreetmap.josm.data.osm.DataSet;
+import org.openstreetmap.josm.data.osm.IPrimitive;
 import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.OsmUtils;
 import org.openstreetmap.josm.data.osm.Tag;
@@ -580,7 +581,7 @@ public class MapCSSTagChecker extends Test.TagTest {
                 final String description = getDescriptionForMatchingSelector(p, matchingSelector);
                 final String description1 = group == null ? description : group;
                 final String description2 = group == null ? null : description;
-                final List<OsmPrimitive> primitives;
+                final List<IPrimitive> primitives;
                 if (env.child != null) {
                     primitives = Arrays.asList(p, env.child);
                 } else {

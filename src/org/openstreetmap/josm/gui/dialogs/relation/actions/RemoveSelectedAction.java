@@ -5,7 +5,7 @@ import static org.openstreetmap.josm.tools.I18n.tr;
 
 import java.awt.event.ActionEvent;
 
-import org.openstreetmap.josm.data.osm.DataSet;
+import org.openstreetmap.josm.data.osm.OsmData;
 import org.openstreetmap.josm.gui.dialogs.relation.MemberTableModel;
 import org.openstreetmap.josm.gui.dialogs.relation.SelectionTableModel;
 import org.openstreetmap.josm.gui.layer.OsmDataLayer;
@@ -32,7 +32,7 @@ public class RemoveSelectedAction extends AddFromSelectionAction {
 
     @Override
     protected void updateEnabledState() {
-        DataSet ds = layer.data;
+        OsmData<?, ?, ?, ?> ds = layer.data;
         if (ds == null || ds.selectionEmpty()) {
             setEnabled(false);
             return;

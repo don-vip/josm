@@ -61,8 +61,8 @@ import javax.swing.ImageIcon;
 import javax.xml.parsers.ParserConfigurationException;
 
 import org.openstreetmap.josm.Main;
-import org.openstreetmap.josm.data.osm.DataSet;
-import org.openstreetmap.josm.data.osm.OsmPrimitive;
+import org.openstreetmap.josm.data.osm.IPrimitive;
+import org.openstreetmap.josm.data.osm.OsmData;
 import org.openstreetmap.josm.data.osm.OsmPrimitiveType;
 import org.openstreetmap.josm.gui.mappaint.MapPaintStyles;
 import org.openstreetmap.josm.gui.mappaint.Range;
@@ -1484,11 +1484,11 @@ public class ImageProvider {
      * @return Icon for {@code primitive} that fits in cell.
      * @since 8903
      */
-    public static ImageIcon getPadded(OsmPrimitive primitive, Dimension iconSize) {
+    public static ImageIcon getPadded(IPrimitive primitive, Dimension iconSize) {
         // Check if the current styles have special icon for tagged nodes.
         if (primitive instanceof org.openstreetmap.josm.data.osm.Node) {
             Pair<StyleElementList, Range> nodeStyles;
-            DataSet ds = primitive.getDataSet();
+            OsmData<?, ?, ?, ?> ds = primitive.getDataSet();
             if (ds != null) {
                 ds.getReadLock().lock();
             }

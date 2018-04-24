@@ -13,6 +13,10 @@ import java.util.function.IntFunction;
 import java.util.function.IntSupplier;
 import java.util.regex.PatternSyntaxException;
 
+import org.openstreetmap.josm.data.osm.INode;
+import org.openstreetmap.josm.data.osm.IPrimitive;
+import org.openstreetmap.josm.data.osm.IRelation;
+import org.openstreetmap.josm.data.osm.IWay;
 import org.openstreetmap.josm.data.osm.Node;
 import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.OsmPrimitiveType;
@@ -20,7 +24,7 @@ import org.openstreetmap.josm.data.osm.OsmUtils;
 import org.openstreetmap.josm.data.osm.Relation;
 import org.openstreetmap.josm.data.osm.RelationMember;
 import org.openstreetmap.josm.data.osm.Way;
-import org.openstreetmap.josm.data.osm.visitor.OsmPrimitiveVisitor;
+import org.openstreetmap.josm.data.osm.visitor.PrimitiveVisitor;
 import org.openstreetmap.josm.data.osm.visitor.paint.relations.MultipolygonCache;
 import org.openstreetmap.josm.gui.mappaint.Environment;
 import org.openstreetmap.josm.gui.mappaint.Range;
@@ -144,7 +148,7 @@ public interface Selector {
          * referrer was found.</p>
          *
          */
-        private class MatchingReferrerFinder implements OsmPrimitiveVisitor {
+        private class MatchingReferrerFinder implements PrimitiveVisitor {
             private final Environment e;
 
             /**
@@ -156,12 +160,12 @@ public interface Selector {
             }
 
             @Override
-            public void visit(Node n) {
+            public void visit(INode n) {
                 // node should never be a referrer
                 throw new AssertionError();
             }
 
-            private <T extends OsmPrimitive> void doVisit(T parent, IntSupplier counter, IntFunction<OsmPrimitive> getter) {
+            private <T extends IPrimitive> void doVisit(T parent, IntSupplier counter, IntFunction<IPrimitive> getter) {
                 // If e.parent is already set to the first matching referrer.
                 // We skip any following referrer injected into the visitor.
                 if (e.parent != null) return;
@@ -186,17 +190,17 @@ public interface Selector {
             }
 
             @Override
-            public void visit(Way w) {
+            public void visit(IWay<?, ?> w) {
                 doVisit(w, w::getNodesCount, w::getNode);
             }
 
             @Override
-            public void visit(Relation r) {
+            public void visit(IRelation<?> r) {
                 doVisit(r, r::getMembersCount, i -> r.getMember(i).getMember());
             }
         }
 
-        private abstract static class AbstractFinder implements OsmPrimitiveVisitor {
+        private abstract static class AbstractFinder implements PrimitiveVisitor {
             protected final Environment e;
 
             protected AbstractFinder(Environment e) {
@@ -204,19 +208,19 @@ public interface Selector {
             }
 
             @Override
-            public void visit(Node n) {
+            public void visit(INode n) {
             }
 
             @Override
-            public void visit(Way w) {
+            public void visit(IWay<?, ?> w) {
             }
 
             @Override
-            public void visit(Relation r) {
+            public void visit(IRelation<?> r) {
             }
 
-            public void visit(Collection<? extends OsmPrimitive> primitives) {
-                for (OsmPrimitive p : primitives) {
+            public void visit(Collection<? extends IPrimitive> primitives) {
+                for (IPrimitive p : primitives) {
                     if (e.child != null) {
                         // abort if first match has been found
                         break;
@@ -226,7 +230,7 @@ public interface Selector {
                 }
             }
 
-            public boolean isPrimitiveUsable(OsmPrimitive p) {
+            public boolean isPrimitiveUsable(IPrimitive p) {
                 return !e.osm.equals(p) && p.isUsable();
             }
         }
@@ -234,7 +238,7 @@ public interface Selector {
         private class MultipolygonOpenEndFinder extends AbstractFinder {
 
             @Override
-            public void visit(Way w) {
+            public void visit(IWay<?, ?> w) {
                 w.visitReferrers(innerVisitor);
             }
 
@@ -242,11 +246,11 @@ public interface Selector {
                 super(e);
             }
 
-            private final OsmPrimitiveVisitor innerVisitor = new AbstractFinder(e) {
+            private final PrimitiveVisitor innerVisitor = new AbstractFinder(e) {
                 @Override
-                public void visit(Relation r) {
+                public void visit(IRelation<?> r) {
                     if (left.matches(e.withPrimitive(r))) {
-                        final List<Node> openEnds = MultipolygonCache.getInstance().get(r).getOpenEnds();
+                        final List<?> openEnds = MultipolygonCache.getInstance().get((Relation) r).getOpenEnds();
                         final int openEndIndex = openEnds.indexOf(e.osm);
                         if (openEndIndex >= 0) {
                             e.parent = r;
@@ -269,11 +273,11 @@ public interface Selector {
             }
 
             @Override
-            public void visit(Way w) {
+            public void visit(IWay<?, ? extends INode> w) {
                 if (e.child == null && Objects.equals(layer, OsmUtils.getLayer(w))
                     && left.matches(new Environment(w).withParent(e.osm))
                     && e.osm instanceof Way && Geometry.PolygonIntersection.CROSSING.equals(
-                            Geometry.polygonIntersection(w.getNodes(), ((Way) e.osm).getNodes()))) {
+                            Geometry.polygonIntersection(w.getRealNodes(), ((Way) e.osm).getNodes()))) {
                     e.child = w;
                 }
             }
@@ -286,9 +290,9 @@ public interface Selector {
             }
 
             @Override
-            public void visit(Node n) {
+            public void visit(INode n) {
                 if (e.child == null && left.matches(new Environment(n).withParent(e.osm))
-                    && ((e.osm instanceof Way && Geometry.nodeInsidePolygon(n, ((Way) e.osm).getNodes()))
+                    && ((e.osm instanceof Way && Geometry.nodeInsidePolygon(n, ((Way) e.osm).getRealNodes()))
                             || (e.osm instanceof Relation && (
                                     (Relation) e.osm).isMultipolygon() && Geometry.isNodeInsideMultiPolygon(n, (Relation) e.osm, null)))) {
                     e.child = n;
@@ -296,13 +300,13 @@ public interface Selector {
             }
 
             @Override
-            public void visit(Way w) {
+            public void visit(IWay<?, ? extends INode> w) {
                 if (e.child == null && left.matches(new Environment(w).withParent(e.osm))
                     && ((e.osm instanceof Way && Geometry.PolygonIntersection.FIRST_INSIDE_SECOND.equals(
-                            Geometry.polygonIntersection(w.getNodes(), ((Way) e.osm).getNodes())))
+                            Geometry.polygonIntersection(w.getRealNodes(), ((Way) e.osm).getNodes())))
                             || (e.osm instanceof Relation && (
                                     (Relation) e.osm).isMultipolygon()
-                                    && Geometry.isPolygonInsideMultiPolygon(w.getNodes(), (Relation) e.osm, null)))) {
+                                    && Geometry.isPolygonInsideMultiPolygon(w.getRealNodes(), (Relation) e.osm, null)))) {
                     e.child = w;
                 }
             }
@@ -331,13 +335,13 @@ public interface Selector {
                         throw new NoSuchElementException();
                     }
                     final Collection<Relation> multipolygons = Utils.filteredCollection(SubclassFilteredCollection.filter(
-                            e.osm.getReferrers(), p -> p.hasTag("type", "multipolygon")), Relation.class);
+                            e.osm.getIReferrers(), p -> p.hasTag("type", "multipolygon")), Relation.class);
                     final Relation multipolygon = multipolygons.iterator().next();
                     if (multipolygon == null) throw new NoSuchElementException();
                     final Set<OsmPrimitive> members = multipolygon.getMemberPrimitives();
                     containsFinder = new ContainsFinder(new Environment(multipolygon)) {
                         @Override
-                        public boolean isPrimitiveUsable(OsmPrimitive p) {
+                        public boolean isPrimitiveUsable(IPrimitive p) {
                             return super.isPrimitiveUsable(p) && !members.contains(p);
                         }
                     };
@@ -371,7 +375,7 @@ public interface Selector {
                 return e.child != null;
             } else if (ChildOrParentSelectorType.SIBLING.equals(type)) {
                 if (e.osm instanceof Node) {
-                    for (Way w : Utils.filteredCollection(e.osm.getReferrers(true), Way.class)) {
+                    for (Way w : Utils.filteredCollection(((Node) e.osm).getReferrers(true), Way.class)) {
                         final int i = w.getNodes().indexOf(e.osm);
                         if (i - 1 >= 0) {
                             final Node n = w.getNode(i - 1);
@@ -390,7 +394,7 @@ public interface Selector {
                     && link.conds != null && !link.conds.isEmpty()
                     && link.conds.get(0) instanceof OpenEndPseudoClassCondition) {
                 if (e.osm instanceof Node) {
-                    e.osm.visitReferrers(new MultipolygonOpenEndFinder(e));
+                    ((Node) e.osm).visitReferrers(new MultipolygonOpenEndFinder(e));
                     return e.parent != null;
                 }
             } else if (ChildOrParentSelectorType.CHILD.equals(type)) {
@@ -623,7 +627,7 @@ public interface Selector {
             return false;
         }
 
-        public boolean matchesBase(OsmPrimitive p) {
+        public boolean matchesBase(IPrimitive p) {
             if (!matchesBase(p.getType())) {
                 return false;
             } else {

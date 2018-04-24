@@ -1,6 +1,8 @@
 // License: GPL. For details, see LICENSE file.
 package org.openstreetmap.josm.data.osm;
 
+import java.util.Set;
+
 import org.openstreetmap.josm.Main;
 import org.openstreetmap.josm.data.coor.EastNorth;
 import org.openstreetmap.josm.data.coor.LatLon;
@@ -97,6 +99,16 @@ public class NodeData extends PrimitiveData implements INode {
     @Override
     public void accept(PrimitiveVisitor visitor) {
         visitor.visit(this);
+    }
+
+    @Override
+    public BBox getBBox() {
+        return new BBox(lon, lat);
+    }
+
+    @Override
+    protected void addToBBox(BBox box, Set<PrimitiveId> visited) {
+        box.add(lon, lat);
     }
 
     @Override

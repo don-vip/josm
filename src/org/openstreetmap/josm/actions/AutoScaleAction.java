@@ -25,6 +25,7 @@ import org.openstreetmap.josm.data.Bounds;
 import org.openstreetmap.josm.data.DataSource;
 import org.openstreetmap.josm.data.conflict.Conflict;
 import org.openstreetmap.josm.data.osm.DataSet;
+import org.openstreetmap.josm.data.osm.IPrimitive;
 import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.visitor.BoundingXYVisitor;
 import org.openstreetmap.josm.data.validation.TestError;
@@ -95,7 +96,7 @@ public class AutoScaleAction extends JosmAction {
      * Zooms the view to display the given set of primitives.
      * @param sel The primitives to zoom to, e.g. the current selection.
      */
-    public static void zoomTo(Collection<OsmPrimitive> sel) {
+    public static void zoomTo(Collection<? extends IPrimitive> sel) {
         BoundingXYVisitor bboxCalculator = new BoundingXYVisitor();
         bboxCalculator.computeBoundingBox(sel);
         // increase bbox. This is required

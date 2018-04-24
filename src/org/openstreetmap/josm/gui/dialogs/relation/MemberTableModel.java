@@ -22,6 +22,7 @@ import javax.swing.table.AbstractTableModel;
 
 import org.openstreetmap.josm.data.SelectionChangedListener;
 import org.openstreetmap.josm.data.osm.DataSet;
+import org.openstreetmap.josm.data.osm.IPrimitive;
 import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.Relation;
 import org.openstreetmap.josm.data.osm.RelationMember;
@@ -97,7 +98,9 @@ implements TableModelListener, SelectionChangedListener, DataSetListener, OsmPri
      */
     public void register() {
         DataSet.addSelectionListener(this);
-        getLayer().data.addDataSetListener(this);
+        if (getLayer().data instanceof DataSet) {
+            ((DataSet) getLayer().data).addDataSetListener(this);
+        }
     }
 
     /**
@@ -105,7 +108,9 @@ implements TableModelListener, SelectionChangedListener, DataSetListener, OsmPri
      */
     public void unregister() {
         DataSet.removeSelectionListener(this);
-        getLayer().data.removeDataSetListener(this);
+        if (getLayer().data instanceof DataSet) {
+            ((DataSet) getLayer().data).removeDataSetListener(this);
+        }
     }
 
     /* --------------------------------------------------------------------------- */
@@ -689,17 +694,16 @@ implements TableModelListener, SelectionChangedListener, DataSetListener, OsmPri
      * @param members the members
      * @param primitives the collection of primitives
      * @return true if there is at least one relation member in this model
-     * which refers to at least on the primitives in <code>primitives</code>; false
-     * otherwise
+     * which refers to at least on the primitives in <code>primitives</code>; false otherwise
      */
-    public static boolean hasMembersReferringTo(Collection<RelationMember> members, Collection<OsmPrimitive> primitives) {
+    public static boolean hasMembersReferringTo(Collection<RelationMember> members, Collection<? extends IPrimitive> primitives) {
         if (primitives == null || primitives.isEmpty())
             return false;
         Set<OsmPrimitive> referrers = new HashSet<>();
         for (RelationMember member : members) {
             referrers.add(member.getMember());
         }
-        for (OsmPrimitive referred : primitives) {
+        for (IPrimitive referred : primitives) {
             if (referrers.contains(referred))
                 return true;
         }
@@ -712,10 +716,9 @@ implements TableModelListener, SelectionChangedListener, DataSetListener, OsmPri
      *
      * @param primitives the collection of primitives
      * @return true if there is at least one relation member in this model
-     * which refers to at least on the primitives in <code>primitives</code>; false
-     * otherwise
+     * which refers to at least on the primitives in <code>primitives</code>; false otherwise
      */
-    public boolean hasMembersReferringTo(Collection<OsmPrimitive> primitives) {
+    public boolean hasMembersReferringTo(Collection<? extends IPrimitive> primitives) {
         return hasMembersReferringTo(members, primitives);
     }
 

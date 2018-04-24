@@ -11,8 +11,8 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
 
+import org.openstreetmap.josm.data.osm.IPrimitive;
 import org.openstreetmap.josm.data.osm.Node;
-import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.Relation;
 import org.openstreetmap.josm.data.osm.Way;
 import org.openstreetmap.josm.data.osm.visitor.paint.PaintColors;
@@ -44,13 +44,13 @@ import org.openstreetmap.josm.tools.Utils;
  * be drawn on the map.
  * There are several steps to derive the list of elements for display:
  * <ol>
- * <li>{@link #generateStyles(OsmPrimitive, double, boolean)} applies the
+ * <li>{@link #generateStyles(IPrimitive, double, boolean)} applies the
  * {@link StyleSource}s one after another to get a key-value map of MapCSS
  * properties. Then a preliminary set of StyleElements is derived from the
  * properties map.</li>
- * <li>{@link #getImpl(OsmPrimitive, double, NavigatableComponent)} handles the
+ * <li>{@link #getImpl(IPrimitive, double, NavigatableComponent)} handles the
  * different forms of multipolygon tagging.</li>
- * <li>{@link #getStyleCacheWithRange(OsmPrimitive, double, NavigatableComponent)}
+ * <li>{@link #getStyleCacheWithRange(IPrimitive, double, NavigatableComponent)}
  * adds a default StyleElement for primitives that would be invisible otherwise.
  * (For example untagged nodes and ways.)</li>
  * </ol>
@@ -131,7 +131,7 @@ public class ElemStyles implements PreferenceChangedListener {
      * @param nc display component
      * @return list of styles
      */
-    public StyleElementList get(OsmPrimitive osm, double scale, NavigatableComponent nc) {
+    public StyleElementList get(IPrimitive osm, double scale, NavigatableComponent nc) {
         return getStyleCacheWithRange(osm, scale, nc).a;
     }
 
@@ -145,7 +145,7 @@ public class ElemStyles implements PreferenceChangedListener {
      * @param nc navigatable component
      * @return pair containing style list and range
      */
-    public Pair<StyleElementList, Range> getStyleCacheWithRange(OsmPrimitive osm, double scale, NavigatableComponent nc) {
+    public Pair<StyleElementList, Range> getStyleCacheWithRange(IPrimitive osm, double scale, NavigatableComponent nc) {
         if (!osm.isCachedStyleUpToDate() || scale <= 0) {
             osm.setCachedStyle(StyleCache.EMPTY_STYLECACHE);
         } else {
@@ -231,7 +231,7 @@ public class ElemStyles implements PreferenceChangedListener {
      * @param nc navigatable component
      * @return pair containing style list and range
      */
-    private Pair<StyleElementList, Range> getImpl(OsmPrimitive osm, double scale, NavigatableComponent nc) {
+    private Pair<StyleElementList, Range> getImpl(IPrimitive osm, double scale, NavigatableComponent nc) {
         if (osm instanceof Node)
             return generateStyles(osm, scale, false);
         else if (osm instanceof Way) {
@@ -241,12 +241,12 @@ public class ElemStyles implements PreferenceChangedListener {
             Color wayColor = null;
 
             // FIXME: Maybe in the future outer way styles apply to outers ignoring the multipolygon?
-            for (OsmPrimitive referrer : osm.getReferrers()) {
+            for (IPrimitive referrer : osm.getIReferrers()) {
                 Relation r = (Relation) referrer;
                 if (!drawMultipolygon || !r.isMultipolygon() || !r.isUsable()) {
                     continue;
                 }
-                Multipolygon multipolygon = MultipolygonCache.getInstance().get(r);
+                Multipolygon<?> multipolygon = MultipolygonCache.getInstance().get(r);
 
                 if (multipolygon.getOuterWays().contains(osm)) {
                     boolean hasIndependentLineStyle = false;
@@ -309,12 +309,12 @@ public class ElemStyles implements PreferenceChangedListener {
 
             if (!isDefaultLines()) return p;
 
-            for (OsmPrimitive referrer : osm.getReferrers()) {
+            for (IPrimitive referrer : osm.getIReferrers()) {
                 Relation ref = (Relation) referrer;
                 if (!drawMultipolygon || !ref.isMultipolygon() || !ref.isUsable()) {
                     continue;
                 }
-                final Multipolygon multipolygon = MultipolygonCache.getInstance().get(ref);
+                final Multipolygon<?> multipolygon = MultipolygonCache.getInstance().get(ref);
 
                 if (multipolygon.getInnerWays().contains(osm)) {
                     p = generateStyles(osm, scale, false);
@@ -362,7 +362,7 @@ public class ElemStyles implements PreferenceChangedListener {
      * outer ways of a multipolygon.
      * @return the generated styles and the valid range as a pair
      */
-    public Pair<StyleElementList, Range> generateStyles(OsmPrimitive osm, double scale, boolean pretendWayIsClosed) {
+    public Pair<StyleElementList, Range> generateStyles(IPrimitive osm, double scale, boolean pretendWayIsClosed) {
 
         List<StyleElement> sl = new ArrayList<>();
         MultiCascade mc = new MultiCascade();
@@ -522,7 +522,7 @@ public class ElemStyles implements PreferenceChangedListener {
      * outer ways of a multipolygon.
      * @return first AreaElement found or {@code null}.
      */
-    public static AreaElement getAreaElemStyle(OsmPrimitive p, boolean pretendWayIsClosed) {
+    public static AreaElement getAreaElemStyle(IPrimitive p, boolean pretendWayIsClosed) {
         MapCSSStyleSource.STYLE_SOURCE_LOCK.readLock().lock();
         try {
             if (MapPaintStyles.getStyles() == null)
@@ -545,7 +545,7 @@ public class ElemStyles implements PreferenceChangedListener {
      * outer ways of a multipolygon.
      * @return {@code true} if primitive has an AreaElement
      */
-    public static boolean hasAreaElemStyle(OsmPrimitive p, boolean pretendWayIsClosed) {
+    public static boolean hasAreaElemStyle(IPrimitive p, boolean pretendWayIsClosed) {
         return getAreaElemStyle(p, pretendWayIsClosed) != null;
     }
 
@@ -558,7 +558,7 @@ public class ElemStyles implements PreferenceChangedListener {
      * @return {@code true} if primitive has area elements, but no line elements
      * @since 12700
      */
-    public static boolean hasOnlyAreaElements(OsmPrimitive p) {
+    public static boolean hasOnlyAreaElements(IPrimitive p) {
         MapCSSStyleSource.STYLE_SOURCE_LOCK.readLock().lock();
         try {
             if (MapPaintStyles.getStyles() == null)

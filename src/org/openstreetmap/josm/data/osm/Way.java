@@ -25,7 +25,7 @@ import org.openstreetmap.josm.tools.Utils;
  * @author imi
  * @since 64
  */
-public final class Way extends OsmPrimitive implements IWay {
+public final class Way extends OsmPrimitive implements IWay<Node, Node> {
 
     /**
      * All way nodes in this way
@@ -35,14 +35,20 @@ public final class Way extends OsmPrimitive implements IWay {
     private BBox bbox;
 
     /**
-     *
+     * Returns the list of nodes in this way.
      * You can modify returned list but changes will not be propagated back
      * to the Way. Use {@link #setNodes(List)} to update this way
      * @return Nodes composing the way
      * @since 1862
      */
+    @Override
     public List<Node> getNodes() {
         return new CopyList<>(nodes);
+    }
+
+    @Override
+    public List<Node> getRealNodes() {
+        return getNodes();
     }
 
     /**
@@ -113,6 +119,7 @@ public final class Way extends OsmPrimitive implements IWay {
      * or <code>index</code> &gt;= {@link #getNodesCount()}
      * @since 1862
      */
+    @Override
     public Node getNode(int index) {
         return nodes[index];
     }
@@ -504,24 +511,14 @@ public final class Way extends OsmPrimitive implements IWay {
         return false;
     }
 
-    /**
-     * Returns the last node of this way.
-     * The result equals <code>{@link #getNode getNode}({@link #getNodesCount getNodesCount} - 1)</code>.
-     * @return the last node of this way
-     * @since 1400
-     */
+    @Override
     public Node lastNode() {
         Node[] nodes = this.nodes;
         if (isIncomplete() || nodes.length == 0) return null;
         return nodes[nodes.length-1];
     }
 
-    /**
-     * Returns the first node of this way.
-     * The result equals {@link #getNode getNode}{@code (0)}.
-     * @return the first node of this way
-     * @since 1400
-     */
+    @Override
     public Node firstNode() {
         Node[] nodes = this.nodes;
         if (isIncomplete() || nodes.length == 0) return null;

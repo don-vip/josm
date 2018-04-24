@@ -35,6 +35,8 @@ import org.openstreetmap.josm.actions.relation.EditRelationAction;
 import org.openstreetmap.josm.command.Command;
 import org.openstreetmap.josm.data.SelectionChangedListener;
 import org.openstreetmap.josm.data.osm.DataSet;
+import org.openstreetmap.josm.data.osm.INode;
+import org.openstreetmap.josm.data.osm.IPrimitive;
 import org.openstreetmap.josm.data.osm.Node;
 import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.WaySegment;
@@ -329,7 +331,7 @@ public class ValidatorDialog extends ToggleDialog implements SelectionChangedLis
         if (tree == null)
             return;
 
-        Collection<OsmPrimitive> sel = new HashSet<>(40);
+        Collection<IPrimitive> sel = new HashSet<>(40);
 
         TreePath[] selectedPaths = tree.getSelectionPaths();
         if (selectedPaths == null)
@@ -344,7 +346,7 @@ public class ValidatorDialog extends ToggleDialog implements SelectionChangedLis
                 if (nodeInfo instanceof TestError) {
                     TestError error = (TestError) nodeInfo;
                     error.getPrimitives().stream()
-                            .filter(OsmPrimitive::isSelectable)
+                            .filter(IPrimitive::isSelectable)
                             .forEach(sel::add);
                 }
             }
@@ -397,7 +399,7 @@ public class ValidatorDialog extends ToggleDialog implements SelectionChangedLis
                 hasFixes = hasFixes || error.isFixable();
                 if (addSelected) {
                     error.getPrimitives().stream()
-                            .filter(OsmPrimitive::isSelectable)
+                            .filter(IPrimitive::isSelectable)
                             .forEach(sel::add);
                 }
             }
@@ -550,14 +552,14 @@ public class ValidatorDialog extends ToggleDialog implements SelectionChangedLis
         public void visit(WaySegment ws) {
             if (ws.lowerIndex < 0 || ws.lowerIndex + 1 >= ws.way.getNodesCount())
                 return;
-            visit(ws.way.getNodes().get(ws.lowerIndex));
-            visit(ws.way.getNodes().get(ws.lowerIndex + 1));
+            visit((INode) ws.way.getNodes().get(ws.lowerIndex));
+            visit((INode) ws.way.getNodes().get(ws.lowerIndex + 1));
         }
 
         @Override
         public void visit(List<Node> nodes) {
             for (Node n: nodes) {
-                visit(n);
+                visit((INode) n);
             }
         }
 

@@ -21,6 +21,7 @@ import javax.swing.event.ListDataListener;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 
+import org.openstreetmap.josm.data.osm.IRelation;
 import org.openstreetmap.josm.data.osm.Relation;
 import org.openstreetmap.josm.gui.MainApplication;
 import org.openstreetmap.josm.gui.PrimitiveRenderer;
@@ -35,7 +36,7 @@ import org.openstreetmap.josm.tools.ImageProvider;
 public class ReferringRelationsBrowser extends JPanel {
 
     /** the list of relations */
-    private JList<Relation> referrers;
+    private JList<IRelation<?>> referrers;
     private final ReferringRelationsBrowserModel model;
     private final transient OsmDataLayer layer;
     private final JCheckBox cbReadFull = new JCheckBox(tr("including immediate children of parent relations"));
@@ -85,6 +86,9 @@ public class ReferringRelationsBrowser extends JPanel {
         add(pnl, BorderLayout.SOUTH);
     }
 
+    /**
+     * Initializes browser.
+     */
     public void init() {
         model.populate(getLayer().data);
     }
@@ -167,11 +171,10 @@ public class ReferringRelationsBrowser extends JPanel {
             int idx = referrers.getSelectedIndex();
             if (idx < 0)
                 return;
-            Relation r = model.getElementAt(idx);
-            if (r == null)
-                return;
-            RelationEditor editor = RelationEditor.getEditor(getLayer(), r, null);
-            editor.setVisible(true);
+            IRelation<?> r = model.getElementAt(idx);
+            if (r instanceof Relation) {
+                RelationEditor.getEditor(getLayer(), (Relation) r, null).setVisible(true);
+            }
         }
 
         @Override

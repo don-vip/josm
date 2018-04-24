@@ -9,13 +9,16 @@ import java.util.List;
 import java.util.Locale;
 import java.util.TreeSet;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import org.openstreetmap.josm.command.Command;
+import org.openstreetmap.josm.data.osm.INode;
+import org.openstreetmap.josm.data.osm.IPrimitive;
+import org.openstreetmap.josm.data.osm.IRelation;
+import org.openstreetmap.josm.data.osm.IWay;
 import org.openstreetmap.josm.data.osm.Node;
 import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.OsmUtils;
-import org.openstreetmap.josm.data.osm.Relation;
-import org.openstreetmap.josm.data.osm.Way;
 import org.openstreetmap.josm.data.osm.WaySegment;
 import org.openstreetmap.josm.data.validation.util.MultipleNameVisitor;
 import org.openstreetmap.josm.tools.AlphanumComparator;
@@ -37,7 +40,7 @@ public class TestError implements Comparable<TestError> {
     private final String description;
     private final String descriptionEn;
     /** The affected primitives */
-    private final Collection<? extends OsmPrimitive> primitives;
+    private final Collection<? extends IPrimitive> primitives;
     /** The primitives or way segments to be highlighted */
     private final Collection<?> highlighted;
     /** The tester that raised this error */
@@ -60,7 +63,7 @@ public class TestError implements Comparable<TestError> {
         private String message;
         private String description;
         private String descriptionEn;
-        private Collection<? extends OsmPrimitive> primitives;
+        private Collection<? extends IPrimitive> primitives;
         private Collection<?> highlighted;
         private Supplier<Command> fixingCommand;
 
@@ -117,7 +120,7 @@ public class TestError implements Comparable<TestError> {
          * @param primitives the primitives affected by this error
          * @return {@code this}
          */
-        public Builder primitives(OsmPrimitive... primitives) {
+        public Builder primitives(IPrimitive... primitives) {
             return primitives(Arrays.asList(primitives));
         }
 
@@ -127,7 +130,7 @@ public class TestError implements Comparable<TestError> {
          * @param primitives the primitives affected by this error
          * @return {@code this}
          */
-        public Builder primitives(Collection<? extends OsmPrimitive> primitives) {
+        public Builder primitives(Collection<? extends IPrimitive> primitives) {
             CheckParameterUtil.ensureThat(this.primitives == null, "primitives already set");
             CheckParameterUtil.ensureParameterNotNull(primitives, "primitives");
             this.primitives = primitives;
@@ -144,7 +147,7 @@ public class TestError implements Comparable<TestError> {
          * @return {@code this}
          * @see ValidatorVisitor#visit(OsmPrimitive)
          */
-        public Builder highlight(OsmPrimitive... highlighted) {
+        public Builder highlight(IPrimitive... highlighted) {
             return highlight(Arrays.asList(highlighted));
         }
 
@@ -155,7 +158,7 @@ public class TestError implements Comparable<TestError> {
          * @return {@code this}
          * @see ValidatorVisitor#visit(OsmPrimitive)
          */
-        public Builder highlight(Collection<? extends OsmPrimitive> highlighted) {
+        public Builder highlight(Collection<? extends IPrimitive> highlighted) {
             CheckParameterUtil.ensureParameterNotNull(highlighted, "highlighted");
             this.highlighted = highlighted;
             return this;
@@ -257,11 +260,22 @@ public class TestError implements Comparable<TestError> {
     }
 
     /**
-     * Gets the list of primitives affected by this error
-     * @return the list of primitives affected by this error
+     * Gets the list of {@link IPrimitive}s affected by this error
+     * @return the list of {@code IPrimitive}s affected by this error
+     * @since xxx
+     */
+    public Collection<? extends IPrimitive> getIPrimitives() {
+        return Collections.unmodifiableCollection(primitives);
+    }
+
+    /**
+     * Gets the list of {@link OsmPrimitive}s affected by this error
+     * @return the list of {@code OsmPrimitive}s affected by this error
      */
     public Collection<? extends OsmPrimitive> getPrimitives() {
-        return Collections.unmodifiableCollection(primitives);
+        return Collections.unmodifiableCollection(
+                primitives.stream().filter(OsmPrimitive.class::isInstance)
+                                      .map(OsmPrimitive.class::cast).collect(Collectors.toList()));
     }
 
     /**
@@ -279,16 +293,16 @@ public class TestError implements Comparable<TestError> {
     public String getIgnoreState() {
         Collection<String> strings = new TreeSet<>();
         StringBuilder ignorestring = new StringBuilder(getIgnoreSubGroup());
-        for (OsmPrimitive o : primitives) {
+        for (IPrimitive o : primitives) {
             // ignore data not yet uploaded
             if (o.isNew())
                 return null;
             String type = "u";
-            if (o instanceof Way) {
+            if (o instanceof IWay<?, ?>) {
                 type = "w";
-            } else if (o instanceof Relation) {
+            } else if (o instanceof IRelation) {
                 type = "r";
-            } else if (o instanceof Node) {
+            } else if (o instanceof INode) {
                 type = "n";
             }
             strings.add(type + '_' + o.getId());

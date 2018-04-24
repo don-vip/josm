@@ -14,20 +14,15 @@ import java.util.Map.Entry;
 import org.openstreetmap.josm.data.DataSource;
 import org.openstreetmap.josm.data.coor.LatLon;
 import org.openstreetmap.josm.data.coor.conversion.DecimalDegreesCoordinateFormat;
-import org.openstreetmap.josm.data.osm.AbstractPrimitive;
 import org.openstreetmap.josm.data.osm.Changeset;
-import org.openstreetmap.josm.data.osm.DataSet;
 import org.openstreetmap.josm.data.osm.DownloadPolicy;
-import org.openstreetmap.josm.data.osm.UploadPolicy;
 import org.openstreetmap.josm.data.osm.INode;
 import org.openstreetmap.josm.data.osm.IPrimitive;
 import org.openstreetmap.josm.data.osm.IRelation;
 import org.openstreetmap.josm.data.osm.IWay;
-import org.openstreetmap.josm.data.osm.Node;
-import org.openstreetmap.josm.data.osm.OsmPrimitive;
-import org.openstreetmap.josm.data.osm.Relation;
+import org.openstreetmap.josm.data.osm.OsmData;
 import org.openstreetmap.josm.data.osm.Tagged;
-import org.openstreetmap.josm.data.osm.Way;
+import org.openstreetmap.josm.data.osm.UploadPolicy;
 import org.openstreetmap.josm.data.osm.visitor.PrimitiveVisitor;
 import org.openstreetmap.josm.tools.date.DateUtils;
 
@@ -145,7 +140,7 @@ public class OsmWriter extends XmlWriter implements PrimitiveVisitor {
     /**
      * Sorts {@code -1} &rarr; {@code -infinity}, then {@code +1} &rarr; {@code +infinity}
      */
-    protected static final Comparator<AbstractPrimitive> byIdComparator = (o1, o2) -> {
+    protected static final Comparator<IPrimitive> byIdComparator = (o1, o2) -> {
         final long i1 = o1.getUniqueId();
         final long i2 = o2.getUniqueId();
         if (i1 < 0 && i2 < 0) {
@@ -155,7 +150,7 @@ public class OsmWriter extends XmlWriter implements PrimitiveVisitor {
         }
     };
 
-    protected <T extends OsmPrimitive> Collection<T> sortById(Collection<T> primitives) {
+    protected <T extends IPrimitive> Collection<T> sortById(Collection<T> primitives) {
         List<T> result = new ArrayList<>(primitives.size());
         result.addAll(primitives);
         result.sort(byIdComparator);
@@ -167,7 +162,7 @@ public class OsmWriter extends XmlWriter implements PrimitiveVisitor {
      * @param data OSM data set
      * @since 12800
      */
-    public void write(DataSet data) {
+    public void write(OsmData<?, ?, ?, ?> data) {
         header(data.getDownloadPolicy(), data.getUploadPolicy(), data.isLocked());
         writeDataSources(data);
         writeContent(data);
@@ -178,7 +173,7 @@ public class OsmWriter extends XmlWriter implements PrimitiveVisitor {
      * Writes the contents of the given dataset (nodes, then ways, then relations)
      * @param ds The dataset to write
      */
-    public void writeContent(DataSet ds) {
+    public void writeContent(OsmData<?, ? extends INode, ? extends IWay<?, ?>, ? extends IRelation> ds) {
         setWithVisible(UploadPolicy.NORMAL.equals(ds.getUploadPolicy()));
         writeNodes(ds.getNodes());
         writeWays(ds.getWays());
@@ -190,8 +185,8 @@ public class OsmWriter extends XmlWriter implements PrimitiveVisitor {
      * @param nodes The nodes to write
      * @since 5737
      */
-    public void writeNodes(Collection<Node> nodes) {
-        for (Node n : sortById(nodes)) {
+    public void writeNodes(Collection<? extends INode> nodes) {
+        for (INode n : sortById(nodes)) {
             if (shouldWrite(n)) {
                 visit(n);
             }
@@ -203,8 +198,8 @@ public class OsmWriter extends XmlWriter implements PrimitiveVisitor {
      * @param ways The ways to write
      * @since 5737
      */
-    public void writeWays(Collection<Way> ways) {
-        for (Way w : sortById(ways)) {
+    public void writeWays(Collection<? extends IWay<?, ?>> ways) {
+        for (IWay<?, ?> w : sortById(ways)) {
             if (shouldWrite(w)) {
                 visit(w);
             }
@@ -216,19 +211,19 @@ public class OsmWriter extends XmlWriter implements PrimitiveVisitor {
      * @param relations The relations to write
      * @since 5737
      */
-    public void writeRelations(Collection<Relation> relations) {
-        for (Relation r : sortById(relations)) {
+    public void writeRelations(Collection<? extends IRelation> relations) {
+        for (IRelation r : sortById(relations)) {
             if (shouldWrite(r)) {
                 visit(r);
             }
         }
     }
 
-    protected boolean shouldWrite(OsmPrimitive osm) {
+    protected boolean shouldWrite(IPrimitive osm) {
         return !osm.isNewOrUndeleted() || !osm.isDeleted();
     }
 
-    public void writeDataSources(DataSet ds) {
+    public void writeDataSources(OsmData<?, ?, ?, ?> ds) {
         for (DataSource s : ds.getDataSources()) {
             out.println("  <bounds minlat='"
                     + DecimalDegreesCoordinateFormat.INSTANCE.latToString(s.bounds.getMin())
@@ -262,7 +257,7 @@ public class OsmWriter extends XmlWriter implements PrimitiveVisitor {
     }
 
     @Override
-    public void visit(IWay w) {
+    public void visit(IWay<?, ?> w) {
         if (w.isIncomplete()) return;
         addCommon(w, "way");
         if (!withBody) {

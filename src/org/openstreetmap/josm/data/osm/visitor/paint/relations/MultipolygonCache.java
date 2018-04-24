@@ -11,7 +11,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.openstreetmap.josm.Main;
 import org.openstreetmap.josm.data.SelectionChangedListener;
 import org.openstreetmap.josm.data.osm.DataSet;
+import org.openstreetmap.josm.data.osm.INode;
+import org.openstreetmap.josm.data.osm.IRelation;
+import org.openstreetmap.josm.data.osm.IRelationMember;
 import org.openstreetmap.josm.data.osm.Node;
+import org.openstreetmap.josm.data.osm.OsmData;
 import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.Relation;
 import org.openstreetmap.josm.data.osm.Way;
@@ -42,9 +46,9 @@ public final class MultipolygonCache implements DataSetListener, LayerChangeList
 
     private static final MultipolygonCache INSTANCE = new MultipolygonCache();
 
-    private final Map<DataSet, Map<Relation, Multipolygon>> cache = new ConcurrentHashMap<>(); // see ticket 11833
+    private final Map<OsmData<?, ?, ?, ?>, Map<IRelation<?>, Multipolygon<?>>> cache = new ConcurrentHashMap<>(); // see ticket 11833
 
-    private final Collection<PolyData> selectedPolyData = new ArrayList<>();
+    private final Collection<PolyData<?>> selectedPolyData = new ArrayList<>();
 
     private MultipolygonCache() {
         Main.addProjectionChangeListener(this);
@@ -62,35 +66,38 @@ public final class MultipolygonCache implements DataSetListener, LayerChangeList
 
     /**
      * Gets a multipolygon from cache.
+     * @param <N> type of OSM node
      * @param r The multipolygon relation
      * @return A multipolygon object for the given relation, or {@code null}
      * @since 11779
      */
-    public Multipolygon get(Relation r) {
+    public <N extends INode> Multipolygon<N> get(IRelation<? extends IRelationMember<?, N, ?, ?>> r) {
         return get(r, false);
     }
 
     /**
      * Gets a multipolygon from cache.
+     * @param <N> type of OSM node
      * @param r The multipolygon relation
      * @param forceRefresh if {@code true}, a new object will be created even of present in cache
      * @return A multipolygon object for the given relation, or {@code null}
      * @since 11779
      */
-    public Multipolygon get(Relation r, boolean forceRefresh) {
-        Multipolygon multipolygon = null;
+    @SuppressWarnings("unchecked")
+    public <N extends INode> Multipolygon<N> get(IRelation<? extends IRelationMember<?, N, ?, ?>> r, boolean forceRefresh) {
+        Multipolygon<N> multipolygon = null;
         if (r != null) {
-            Map<Relation, Multipolygon> map2 = cache.get(r.getDataSet());
+            Map<IRelation<?>, Multipolygon<?>> map2 = cache.get(r.getDataSet());
             if (map2 == null) {
                 map2 = new ConcurrentHashMap<>();
                 cache.put(r.getDataSet(), map2);
             }
-            multipolygon = map2.get(r);
+            multipolygon = (Multipolygon<N>) map2.get(r);
             if (multipolygon == null || forceRefresh) {
-                multipolygon = new Multipolygon(r);
+                multipolygon = new Multipolygon<>(r);
                 map2.put(r, multipolygon);
                 synchronized (this) {
-                    for (PolyData pd : multipolygon.getCombinedPolygons()) {
+                    for (PolyData<?> pd : multipolygon.getCombinedPolygons()) {
                         if (pd.isSelected()) {
                             selectedPolyData.add(pd);
                         }
@@ -105,8 +112,8 @@ public final class MultipolygonCache implements DataSetListener, LayerChangeList
      * Clears the cache for the given dataset.
      * @param ds the data set
      */
-    public void clear(DataSet ds) {
-        Map<Relation, Multipolygon> map2 = cache.remove(ds);
+    public void clear(OsmData<?, ?, ?, ?> ds) {
+        Map<IRelation<?>, Multipolygon<?>> map2 = cache.remove(ds);
         if (map2 != null) {
             map2.clear();
         }
@@ -119,9 +126,9 @@ public final class MultipolygonCache implements DataSetListener, LayerChangeList
         cache.clear();
     }
 
-    private Collection<Map<Relation, Multipolygon>> getMapsFor(DataSet ds) {
-        List<Map<Relation, Multipolygon>> result = new ArrayList<>();
-        Map<Relation, Multipolygon> map2 = cache.get(ds);
+    private Collection<Map<IRelation<?>, Multipolygon<?>>> getMapsFor(DataSet ds) {
+        List<Map<IRelation<?>, Multipolygon<?>>> result = new ArrayList<>();
+        Map<IRelation<?>, Multipolygon<?>> map2 = cache.get(ds);
         if (map2 != null) {
             result.add(map2);
         }
@@ -141,10 +148,10 @@ public final class MultipolygonCache implements DataSetListener, LayerChangeList
         updateMultipolygonsReferringTo(event, primitives, ds, null);
     }
 
-    private Collection<Map<Relation, Multipolygon>> updateMultipolygonsReferringTo(
+    private Collection<Map<IRelation<?>, Multipolygon<?>>> updateMultipolygonsReferringTo(
             AbstractDatasetChangedEvent event, Collection<? extends OsmPrimitive> primitives,
-            DataSet ds, Collection<Map<Relation, Multipolygon>> initialMaps) {
-        Collection<Map<Relation, Multipolygon>> maps = initialMaps;
+            DataSet ds, Collection<Map<IRelation<?>, Multipolygon<?>>> initialMaps) {
+        Collection<Map<IRelation<?>, Multipolygon<?>>> maps = initialMaps;
         if (primitives != null) {
             for (OsmPrimitive p : primitives) {
                 if (isMultipolygon(p)) {
@@ -170,7 +177,7 @@ public final class MultipolygonCache implements DataSetListener, LayerChangeList
         return maps;
     }
 
-    private static void processEvent(AbstractDatasetChangedEvent event, Relation r, Collection<Map<Relation, Multipolygon>> maps) {
+    private static void processEvent(AbstractDatasetChangedEvent event, Relation r, Collection<Map<IRelation<?>, Multipolygon<?>>> maps) {
         if (event instanceof NodeMovedEvent || event instanceof WayNodesChangedEvent) {
             dispatchEvent(event, r, maps);
         } else if (event instanceof PrimitivesRemovedEvent) {
@@ -183,11 +190,11 @@ public final class MultipolygonCache implements DataSetListener, LayerChangeList
         }
     }
 
-    private static void dispatchEvent(AbstractDatasetChangedEvent event, Relation r, Collection<Map<Relation, Multipolygon>> maps) {
-        for (Map<Relation, Multipolygon> map : maps) {
-            Multipolygon m = map.get(r);
+    private static void dispatchEvent(AbstractDatasetChangedEvent event, Relation r, Collection<Map<IRelation<?>, Multipolygon<?>>> maps) {
+        for (Map<IRelation<?>, Multipolygon<?>> map : maps) {
+            Multipolygon<?> m = map.get(r);
             if (m != null) {
-                for (PolyData pd : m.getCombinedPolygons()) {
+                for (PolyData<?> pd : m.getCombinedPolygons()) {
                     if (event instanceof NodeMovedEvent) {
                         pd.nodeMoved((NodeMovedEvent) event);
                     } else if (event instanceof WayNodesChangedEvent) {
@@ -203,8 +210,8 @@ public final class MultipolygonCache implements DataSetListener, LayerChangeList
         }
     }
 
-    private static void removeMultipolygonFrom(Relation r, Collection<Map<Relation, Multipolygon>> maps) {
-        for (Map<Relation, Multipolygon> map : maps) {
+    private static void removeMultipolygonFrom(Relation r, Collection<Map<IRelation<?>, Multipolygon<?>>> maps) {
+        for (Map<IRelation<?>, Multipolygon<?>> map : maps) {
             map.remove(r);
         }
         // Erase style cache for polygon members
@@ -252,19 +259,21 @@ public final class MultipolygonCache implements DataSetListener, LayerChangeList
     public void dataChanged(DataChangedEvent event) {
         // Do not call updateMultipolygonsReferringTo as getPrimitives()
         // can return all the data set primitives for this event
-        Collection<Map<Relation, Multipolygon>> maps = null;
+        Collection<Map<IRelation<?>, Multipolygon<?>>> maps = null;
         for (OsmPrimitive p : event.getPrimitives()) {
             if (isMultipolygon(p)) {
                 if (maps == null) {
                     maps = getMapsFor(event.getDataset());
                 }
-                for (Map<Relation, Multipolygon> map : maps) {
+                for (Map<IRelation<?>, Multipolygon<?>> map : maps) {
                     // DataChangedEvent is sent after downloading incomplete members (see #7131),
                     // without having received RelationMembersChangedEvent or PrimitivesAddedEvent
                     // OR when undoing a move of a large number of nodes (see #7195),
                     // without having received NodeMovedEvent
                     // This ensures concerned multipolygons will be correctly redrawn
-                    map.remove(p);
+                    if (p instanceof IRelation) {
+                        map.remove((IRelation<?>) p);
+                    }
                 }
             }
         }
@@ -295,13 +304,13 @@ public final class MultipolygonCache implements DataSetListener, LayerChangeList
     @Override
     public synchronized void selectionChanged(Collection<? extends OsmPrimitive> newSelection) {
 
-        for (Iterator<PolyData> it = selectedPolyData.iterator(); it.hasNext();) {
+        for (Iterator<PolyData<?>> it = selectedPolyData.iterator(); it.hasNext();) {
             it.next().setSelected(false);
             it.remove();
         }
 
         DataSet ds = null;
-        Collection<Map<Relation, Multipolygon>> maps = null;
+        Collection<Map<IRelation<?>, Multipolygon<?>>> maps = null;
         for (OsmPrimitive p : newSelection) {
             if (p instanceof Way && p.getDataSet() != null) {
                 if (ds == null) {
@@ -312,10 +321,10 @@ public final class MultipolygonCache implements DataSetListener, LayerChangeList
                         if (maps == null) {
                             maps = getMapsFor(ds);
                         }
-                        for (Map<Relation, Multipolygon> map : maps) {
-                            Multipolygon multipolygon = map.get(ref);
+                        for (Map<IRelation<?>, Multipolygon<?>> map : maps) {
+                            Multipolygon<?> multipolygon = map.get((IRelation<?>) ref);
                             if (multipolygon != null) {
-                                for (PolyData pd : multipolygon.getCombinedPolygons()) {
+                                for (PolyData<?> pd : multipolygon.getCombinedPolygons()) {
                                     if (pd.getWayIds().contains(p.getUniqueId())) {
                                         pd.setSelected(true);
                                         selectedPolyData.add(pd);

@@ -21,6 +21,9 @@ import org.openstreetmap.josm.command.ChangeCommand;
 import org.openstreetmap.josm.command.Command;
 import org.openstreetmap.josm.data.coor.EastNorth;
 import org.openstreetmap.josm.data.osm.DefaultNameFormatter;
+import org.openstreetmap.josm.data.osm.INode;
+import org.openstreetmap.josm.data.osm.IPrimitive;
+import org.openstreetmap.josm.data.osm.IWay;
 import org.openstreetmap.josm.data.osm.Node;
 import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.Relation;
@@ -137,7 +140,7 @@ public class MultipolygonTest extends Test {
             boolean hasRepeatedMembers = checkRepeatedWayMembers(r);
             // Rest of checks is only for complete multipolygon
             if (!hasRepeatedMembers && !r.hasIncompleteMembers()) {
-                Multipolygon polygon = new Multipolygon(r);
+                Multipolygon<?> polygon = new Multipolygon<>(r);
                 checkStyleConsistency(r, polygon);
                 checkGeometryAndRoles(r, polygon);
             }
@@ -172,14 +175,14 @@ public class MultipolygonTest extends Test {
      * @param r relation
      * @param polygon multipolygon
      */
-    private void checkStyleConsistency(Relation r, Multipolygon polygon) {
+    private void checkStyleConsistency(Relation r, Multipolygon<?> polygon) {
         ElemStyles styles = MapPaintStyles.getStyles();
         if (styles != null && !r.isBoundary()) {
             AreaElement area = ElemStyles.getAreaElemStyle(r, false);
             boolean areaStyle = area != null;
             // If area style was not found for relation then use style of ways
             if (area == null) {
-                for (Way w : polygon.getOuterWays()) {
+                for (IWay<?, ?> w : polygon.getOuterWays()) {
                     area = ElemStyles.getAreaElemStyle(w, true);
                     if (area != null) {
                         break;
@@ -202,7 +205,7 @@ public class MultipolygonTest extends Test {
             }
 
             if (area != null) {
-                for (Way wInner : polygon.getInnerWays()) {
+                for (IWay<?, ?> wInner : polygon.getInnerWays()) {
                     if (area.equals(ElemStyles.getAreaElemStyle(wInner, false))) {
                         errors.add(TestError.builder(this, Severity.OTHER, INNER_STYLE_MISMATCH)
                                 .message(tr("With the currently used mappaint style the style for inner way equals the multipolygon style"))
@@ -211,7 +214,7 @@ public class MultipolygonTest extends Test {
                                 .build());
                     }
                 }
-                for (Way wOuter : polygon.getOuterWays()) {
+                for (IWay<?, ?> wOuter : polygon.getOuterWays()) {
                     AreaElement areaOuter = ElemStyles.getAreaElemStyle(wOuter, false);
                     if (areaOuter != null) {
                         if (!area.equals(areaOuter)) {
@@ -241,13 +244,14 @@ public class MultipolygonTest extends Test {
      * <li>{@link #INNER_WAY_OUTSIDE}: Multipolygon inner way is outside</li>
      * <li>{@link #CROSSING_WAYS}: Intersection between multipolygon ways</li>
      * </ul>
+     * @param <N> type of OSM node
      * @param r relation
      * @param polygon multipolygon
      */
-    private void checkGeometryAndRoles(Relation r, Multipolygon polygon) {
+    private <N extends INode> void checkGeometryAndRoles(Relation r, Multipolygon<N> polygon) {
         int oldErrorsSize = errors.size();
 
-        List<Node> openNodes = polygon.getOpenEnds();
+        List<? extends INode> openNodes = polygon.getOpenEnds();
         if (!openNodes.isEmpty()) {
             errors.add(TestError.builder(this, Severity.ERROR, NON_CLOSED_WAY)
                     .message(tr("Multipolygon is not closed"))
@@ -266,19 +270,19 @@ public class MultipolygonTest extends Test {
             return;
 
         Set<Node> sharedNodes = findIntersectionNodes(r);
-        List<PolyData> innerPolygons = polygon.getInnerPolygons();
-        List<PolyData> outerPolygons = polygon.getOuterPolygons();
-        List<PolyData> allPolygons = new ArrayList<>();
+        List<PolyData<N>> innerPolygons = polygon.getInnerPolygons();
+        List<PolyData<N>> outerPolygons = polygon.getOuterPolygons();
+        List<PolyData<N>> allPolygons = new ArrayList<>();
         allPolygons.addAll(outerPolygons);
         allPolygons.addAll(innerPolygons);
-        Map<PolyData, List<PolyData>> crossingPolyMap = findIntersectingWays(r, innerPolygons, outerPolygons);
+        Map<PolyData<N>, List<PolyData<N>>> crossingPolyMap = findIntersectingWays(r, innerPolygons, outerPolygons);
 
         if (!sharedNodes.isEmpty()) {
             for (int i = 0; i < allPolygons.size(); i++) {
-                PolyData pd1 = allPolygons.get(i);
+                PolyData<N> pd1 = allPolygons.get(i);
                 checkPolygonForSelfIntersection(r, pd1);
                 for (int j = i + 1; j < allPolygons.size(); j++) {
-                    PolyData pd2 = allPolygons.get(j);
+                    PolyData<N> pd2 = allPolygons.get(j);
                     if (!checkProblemMap(crossingPolyMap, pd1, pd2)) {
                         checkPolygonsForSharedNodes(r, pd1, pd2, sharedNodes);
                     }
@@ -302,20 +306,21 @@ public class MultipolygonTest extends Test {
     /**
      * Check if a polygon ring is self-intersecting when the ring was build from multiple ways.
      * An self intersection in a single way is checked in {@link SelfIntersectingWay}.
+     * @param <N> type of OSM node
      * @param r the relation
      * @param pd the ring
      */
-    private void checkPolygonForSelfIntersection(Relation r, PolyData pd) {
+    private <N extends INode> void checkPolygonForSelfIntersection(Relation r, PolyData<N> pd) {
         if (pd.getWayIds().size() == 1)
             return;
-        List<Node> wayNodes = pd.getNodes();
+        List<N> wayNodes = pd.getNodes();
         int num = wayNodes.size();
-        Set<Node> nodes = new HashSet<>();
-        Node firstNode = wayNodes.get(0);
+        Set<N> nodes = new HashSet<>();
+        N firstNode = wayNodes.get(0);
         nodes.add(firstNode);
-        List<Node> isNodes = new ArrayList<>();
+        List<N> isNodes = new ArrayList<>();
         for (int i = 1; i < num - 1; i++) {
-            Node n = wayNodes.get(i);
+            N n = wayNodes.get(i);
             if (nodes.contains(n)) {
                 isNodes.add(n);
             } else {
@@ -323,7 +328,7 @@ public class MultipolygonTest extends Test {
             }
         }
         if (!isNodes.isEmpty()) {
-            List<OsmPrimitive> prims = new ArrayList<>();
+            List<IPrimitive> prims = new ArrayList<>();
             prims.add(r);
             prims.addAll(isNodes);
             errors.add(TestError.builder(this, Severity.WARNING, CROSSING_WAYS)
@@ -375,7 +380,7 @@ public class MultipolygonTest extends Test {
         CROSSING
     }
 
-    private void checkPolygonsForSharedNodes(Relation r, PolyData pd1, PolyData pd2, Set<Node> allSharedNodes) {
+    private <N extends INode> void checkPolygonsForSharedNodes(Relation r, PolyData<N> pd1, PolyData<N> pd2, Set<Node> allSharedNodes) {
         Set<Node> sharedByPolygons = new HashSet<>(allSharedNodes);
         sharedByPolygons.retainAll(pd1.getNodes());
         sharedByPolygons.retainAll(pd2.getNodes());
@@ -421,20 +426,20 @@ public class MultipolygonTest extends Test {
         }
     }
 
-    private static ExtPolygonIntersection checkOverlapAtSharedNodes(Set<Node> shared, PolyData pd1, PolyData pd2) {
+    private static <N extends INode> ExtPolygonIntersection checkOverlapAtSharedNodes(Set<Node> shared, PolyData<N> pd1, PolyData<N> pd2) {
         // Idea: if two polygons share one or more nodes they can either just touch or share segments or intersect.
         // The insideness test is complex, so we try to reduce the number of these tests.
         // There is no need to check all nodes, we only have to check the node following a shared node.
 
         int[] flags = new int[2];
         for (int loop = 0; loop < flags.length; loop++) {
-            List<Node> nodes2Test = loop == 0 ? pd1.getNodes() : pd2.getNodes();
+            List<N> nodes2Test = loop == 0 ? pd1.getNodes() : pd2.getNodes();
             int num = nodes2Test.size() - 1; // ignore closing duplicate node
 
 
             int lenShared = 0;
             for (int i = 0; i < num; i++) {
-                Node n = nodes2Test.get(i);
+                N n = nodes2Test.get(i);
                 if (shared.contains(n)) {
                     ++lenShared;
                 } else {
@@ -476,9 +481,9 @@ public class MultipolygonTest extends Test {
      */
     private static class PolygonLevel {
         final int level; // nesting level, even for outer, odd for inner polygons.
-        final PolyData outerWay;
+        final PolyData<?> outerWay;
 
-        PolygonLevel(PolyData pd, int level) {
+        PolygonLevel(PolyData<?> pd, int level) {
             this.outerWay = pd;
             this.level = level;
         }
@@ -486,13 +491,15 @@ public class MultipolygonTest extends Test {
 
     /**
      * Calculate the nesting levels of the polygon rings and check if calculated role matches
+     * @param <N> type of OSM node
      * @param r relation (for error reporting)
      * @param allPolygons list of polygon rings
      * @param wayMap maps way ids to relation members
      * @param sharedNodes all nodes shared by multiple ways of this multipolygon
      */
-    private void checkRoles(Relation r, List<PolyData> allPolygons, Map<Long, RelationMember> wayMap, Set<Node> sharedNodes) {
-        PolygonLevelFinder levelFinder = new PolygonLevelFinder(sharedNodes);
+    private <N extends INode> void checkRoles(
+            Relation r, List<PolyData<N>> allPolygons, Map<Long, RelationMember> wayMap, Set<Node> sharedNodes) {
+        PolygonLevelFinder<N> levelFinder = new PolygonLevelFinder<>(sharedNodes);
         List<PolygonLevel> list = levelFinder.findOuterWays(allPolygons);
         if (list == null || list.isEmpty()) {
             return;
@@ -526,11 +533,12 @@ public class MultipolygonTest extends Test {
 
     /**
      * Check if a node is inside the polygon according to the insideness rules of Shape.
+     * @param <N> type of OSM node
      * @param n the node
      * @param p the polygon
      * @return true if the node is inside the polygon
      */
-    private static boolean checkIfNodeIsInsidePolygon(Node n, PolyData p) {
+    private static <N extends INode> boolean checkIfNodeIsInsidePolygon(N n, PolyData<N> p) {
         EastNorth en = n.getEastNorth();
         return en != null && p.get().contains(en.getX(), en.getY());
     }
@@ -538,15 +546,17 @@ public class MultipolygonTest extends Test {
     /**
      * Determine multipolygon ways which are intersecting (crossing without a common node) or sharing one or more way segments.
      * See also {@link CrossingWays}
+     * @param <N> type of OSM node
      * @param r the relation (for error reporting)
      * @param innerPolygons list of inner polygons
      * @param outerPolygons list of outer polygons
      * @return map with crossing polygons
      */
-    private Map<PolyData, List<PolyData>> findIntersectingWays(Relation r, List<PolyData> innerPolygons,
-            List<PolyData> outerPolygons) {
-        HashMap<PolyData, List<PolyData>> crossingPolygonsMap = new HashMap<>();
-        HashMap<PolyData, List<PolyData>> sharedWaySegmentsPolygonsMap = new HashMap<>();
+    @SuppressWarnings("unchecked")
+    private <N extends INode> Map<PolyData<N>, List<PolyData<N>>> findIntersectingWays(
+            Relation r, List<PolyData<N>> innerPolygons, List<PolyData<N>> outerPolygons) {
+        HashMap<PolyData<N>, List<PolyData<N>>> crossingPolygonsMap = new HashMap<>();
+        HashMap<PolyData<N>, List<PolyData<N>>> sharedWaySegmentsPolygonsMap = new HashMap<>();
 
         for (int loop = 0; loop < 2; loop++) {
             /** All way segments, grouped by cells */
@@ -554,7 +564,7 @@ public class MultipolygonTest extends Test {
             /** The already detected ways in error */
             final Map<List<Way>, List<WaySegment>> problemWays = new HashMap<>(50);
 
-            Map<PolyData, List<PolyData>> problemPolygonMap = (loop == 0) ? crossingPolygonsMap
+            Map<PolyData<N>, List<PolyData<N>>> problemPolygonMap = (loop == 0) ? crossingPolygonsMap
                     : sharedWaySegmentsPolygonsMap;
 
             for (Way w : r.getMemberPrimitives(Way.class)) {
@@ -562,7 +572,7 @@ public class MultipolygonTest extends Test {
             }
 
             if (!problemWays.isEmpty()) {
-                List<PolyData> allPolygons = new ArrayList<>(innerPolygons.size() + outerPolygons.size());
+                List<PolyData<N>> allPolygons = new ArrayList<>(innerPolygons.size() + outerPolygons.size());
                 allPolygons.addAll(innerPolygons);
                 allPolygons.addAll(outerPolygons);
 
@@ -570,12 +580,12 @@ public class MultipolygonTest extends Test {
                     List<Way> ways = entry.getKey();
                     if (ways.size() != 2)
                         continue;
-                    PolyData[] crossingPolys = new PolyData[2];
+                    PolyData<?>[] crossingPolys = new PolyData<?>[2];
                     boolean allInner = true;
                     for (int i = 0; i < 2; i++) {
                         Way w = ways.get(i);
                         for (int j = 0; j < allPolygons.size(); j++) {
-                            PolyData pd = allPolygons.get(j);
+                            PolyData<?> pd = allPolygons.get(j);
                             if (pd.getWayIds().contains(w.getUniqueId())) {
                                 crossingPolys[i] = pd;
                                 if (j >= innerPolygons.size())
@@ -586,12 +596,12 @@ public class MultipolygonTest extends Test {
                     }
                     boolean samePoly = false;
                     if (crossingPolys[0] != null && crossingPolys[1] != null) {
-                        List<PolyData> crossingPolygons = problemPolygonMap.get(crossingPolys[0]);
+                        List<PolyData<N>> crossingPolygons = problemPolygonMap.get(crossingPolys[0]);
                         if (crossingPolygons == null) {
                             crossingPolygons = new ArrayList<>();
-                            problemPolygonMap.put(crossingPolys[0], crossingPolygons);
+                            problemPolygonMap.put((PolyData<N>) crossingPolys[0], crossingPolygons);
                         }
-                        crossingPolygons.add(crossingPolys[1]);
+                        crossingPolygons.add((PolyData<N>) crossingPolys[1]);
                         if (crossingPolys[0] == crossingPolys[1]) {
                             samePoly = true;
                         }
@@ -659,17 +669,19 @@ public class MultipolygonTest extends Test {
 
     /**
      * Check if map contains combination of two given polygons.
+     * @param <N> type of OSM node
      * @param problemPolyMap the map
      * @param pd1 1st polygon
      * @param pd2 2nd polygon
      * @return true if the combination of polygons is found in the map
      */
-    private static boolean checkProblemMap(Map<PolyData, List<PolyData>> problemPolyMap, PolyData pd1, PolyData pd2) {
-        List<PolyData> crossingWithFirst = problemPolyMap.get(pd1);
+    private static <N extends INode> boolean checkProblemMap(
+            Map<PolyData<N>, List<PolyData<N>>> problemPolyMap, PolyData<N> pd1, PolyData<N> pd2) {
+        List<PolyData<N>> crossingWithFirst = problemPolyMap.get(pd1);
         if (crossingWithFirst != null && crossingWithFirst.contains(pd2)) {
             return true;
         }
-        List<PolyData> crossingWith2nd = problemPolyMap.get(pd2);
+        List<PolyData<N>> crossingWith2nd = problemPolyMap.get(pd2);
         return crossingWith2nd != null && crossingWith2nd.contains(pd1);
     }
 
@@ -700,10 +712,10 @@ public class MultipolygonTest extends Test {
         }
     }
 
-    private static Collection<? extends OsmPrimitive> combineRelAndPrimitives(Relation r, Collection<? extends OsmPrimitive> primitives) {
+    private static Collection<? extends IPrimitive> combineRelAndPrimitives(Relation r, Collection<? extends IPrimitive> primitives) {
         // add multipolygon in order to let user select something and fix the error
         if (!primitives.contains(r)) {
-            List<OsmPrimitive> newPrimitives = new ArrayList<>(primitives);
+            List<IPrimitive> newPrimitives = new ArrayList<>(primitives);
             newPrimitives.add(0, r);
             return newPrimitives;
         } else {
@@ -809,22 +821,23 @@ public class MultipolygonTest extends Test {
 
     /**
      * Find nesting levels of polygons. Logic taken from class MultipolygonBuilder, uses different structures.
+     * @param <N> type of OSM node
      */
-    private static class PolygonLevelFinder {
+    private static class PolygonLevelFinder<N extends INode> {
         private final Set<Node> sharedNodes;
 
         PolygonLevelFinder(Set<Node> sharedNodes) {
             this.sharedNodes = sharedNodes;
         }
 
-        List<PolygonLevel> findOuterWays(List<PolyData> allPolygons) {
+        List<PolygonLevel> findOuterWays(List<PolyData<N>> allPolygons) {
             return findOuterWaysRecursive(0, allPolygons);
         }
 
-        private List<PolygonLevel> findOuterWaysRecursive(int level, List<PolyData> polygons) {
+        private List<PolygonLevel> findOuterWaysRecursive(int level, List<PolyData<N>> polygons) {
             final List<PolygonLevel> result = new ArrayList<>();
 
-            for (PolyData pd : polygons) {
+            for (PolyData<N> pd : polygons) {
                 if (processOuterWay(level, polygons, result, pd) == null) {
                     return null;
                 }
@@ -833,8 +846,8 @@ public class MultipolygonTest extends Test {
             return result;
         }
 
-        private Object processOuterWay(int level, List<PolyData> polygons, List<PolygonLevel> result, PolyData pd) {
-            List<PolyData> inners = findInnerWaysCandidates(pd, polygons);
+        private Object processOuterWay(int level, List<PolyData<N>> polygons, List<PolygonLevel> result, PolyData<N> pd) {
+            List<PolyData<N>> inners = findInnerWaysCandidates(pd, polygons);
 
             if (inners != null) {
                 //add new outer polygon
@@ -857,10 +870,10 @@ public class MultipolygonTest extends Test {
          * @param polygons all polygons
          * @return null if outerCandidate is inside any other polygon, else a list of inner polygons (which might be empty)
          */
-        private List<PolyData> findInnerWaysCandidates(PolyData outerCandidate, List<PolyData> polygons) {
-            List<PolyData> innerCandidates = new ArrayList<>();
+        private List<PolyData<N>> findInnerWaysCandidates(PolyData<N> outerCandidate, List<PolyData<N>> polygons) {
+            List<PolyData<N>> innerCandidates = new ArrayList<>();
 
-            for (PolyData inner : polygons) {
+            for (PolyData<N> inner : polygons) {
                 if (inner == outerCandidate) {
                     continue;
                 }
@@ -868,8 +881,8 @@ public class MultipolygonTest extends Test {
                     continue;
                 }
                 boolean useIntersectionTest = false;
-                Node unsharedOuterNode = null;
-                Node unsharedInnerNode = getNonIntersectingNode(outerCandidate, inner);
+                N unsharedOuterNode = null;
+                N unsharedInnerNode = getNonIntersectingNode(outerCandidate, inner);
                 if (unsharedInnerNode != null) {
                     if (checkIfNodeIsInsidePolygon(unsharedInnerNode, outerCandidate)) {
                         innerCandidates.add(inner);
@@ -914,8 +927,8 @@ public class MultipolygonTest extends Test {
          * @param pd2 2nd polygon
          * @return node of pd2 which is not an intersection node with pd1 or null if none is found
          */
-        private Node getNonIntersectingNode(PolyData pd1, PolyData pd2) {
-            for (Node n : pd2.getNodes()) {
+        private N getNonIntersectingNode(PolyData<N> pd1, PolyData<N> pd2) {
+            for (N n : pd2.getNodes()) {
                 if (!sharedNodes.contains(n) || !pd1.getNodes().contains(n))
                     return n;
             }

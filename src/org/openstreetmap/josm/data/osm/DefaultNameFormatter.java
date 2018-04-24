@@ -33,7 +33,6 @@ import org.openstreetmap.josm.spi.preferences.Config;
 import org.openstreetmap.josm.tools.AlphanumComparator;
 import org.openstreetmap.josm.tools.I18n;
 import org.openstreetmap.josm.tools.Utils;
-import org.openstreetmap.josm.tools.template_engine.TemplateEngineDataProvider;
 
 /**
  * This is the default implementation of a {@link NameFormatter} for names of {@link IPrimitive}s
@@ -140,9 +139,9 @@ public class DefaultNameFormatter implements NameFormatter, HistoryNameFormatter
         if (osm instanceof INode) {
             return format((INode) osm);
         } else if (osm instanceof IWay) {
-            return format((IWay) osm);
+            return format((IWay<?, ?>) osm);
         } else if (osm instanceof IRelation) {
-            return format((IRelation) osm);
+            return format((IRelation<?>) osm);
         }
         return null;
     }
@@ -154,7 +153,7 @@ public class DefaultNameFormatter implements NameFormatter, HistoryNameFormatter
             name.append(tr("incomplete"));
         } else {
             TaggingPreset preset = TaggingPresetNameTemplateList.getInstance().findPresetTemplate(node);
-            if (preset == null || !(node instanceof TemplateEngineDataProvider)) {
+            if (preset == null) {
                 String n;
                 if (Config.getPref().getBoolean("osm-primitives.localize-name", true)) {
                     n = node.getLocalName();
@@ -185,7 +184,7 @@ public class DefaultNameFormatter implements NameFormatter, HistoryNameFormatter
                 }
                 name.append(n);
             } else {
-                preset.nameTemplate.appendText(name, (TemplateEngineDataProvider) node);
+                preset.nameTemplate.appendText(name, node);
             }
             if (node.isLatLonKnown() && Config.getPref().getBoolean("osm-primitives.showcoor")) {
                 name.append(" \u200E(")
@@ -213,7 +212,7 @@ public class DefaultNameFormatter implements NameFormatter, HistoryNameFormatter
     }
 
     @Override
-    public String format(IWay way) {
+    public String format(IWay<?, ?> way) {
         StringBuilder name = new StringBuilder();
 
         char mark;
@@ -232,7 +231,7 @@ public class DefaultNameFormatter implements NameFormatter, HistoryNameFormatter
             name.append(tr("incomplete"));
         } else {
             TaggingPreset preset = TaggingPresetNameTemplateList.getInstance().findPresetTemplate(way);
-            if (preset == null || !(way instanceof TemplateEngineDataProvider)) {
+            if (preset == null) {
                 String n;
                 if (Config.getPref().getBoolean("osm-primitives.localize-name", true)) {
                     n = way.getLocalName();
@@ -275,7 +274,7 @@ public class DefaultNameFormatter implements NameFormatter, HistoryNameFormatter
 
                 name.append(n);
             } else {
-                preset.nameTemplate.appendText(name, (TemplateEngineDataProvider) way);
+                preset.nameTemplate.appendText(name, way);
             }
 
             int nodesNo = way.getRealNodesCount();
@@ -297,15 +296,15 @@ public class DefaultNameFormatter implements NameFormatter, HistoryNameFormatter
         return result;
     }
 
-    private final Comparator<IWay> wayComparator = (w1, w2) -> format(w1).compareTo(format(w2));
+    private final Comparator<IWay<?, ?>> wayComparator = (w1, w2) -> format(w1).compareTo(format(w2));
 
     @Override
-    public Comparator<IWay> getWayComparator() {
+    public Comparator<IWay<?, ?>> getWayComparator() {
         return wayComparator;
     }
 
     @Override
-    public String format(IRelation relation) {
+    public String format(IRelation<?> relation) {
         StringBuilder name = new StringBuilder();
         if (relation.isIncomplete()) {
             name.append(tr("incomplete"));
@@ -335,8 +334,8 @@ public class DefaultNameFormatter implements NameFormatter, HistoryNameFormatter
         return result;
     }
 
-    private static StringBuilder formatRelationNameAndType(IRelation relation, StringBuilder result, TaggingPreset preset) {
-        if (preset == null || !(relation instanceof TemplateEngineDataProvider)) {
+    private static StringBuilder formatRelationNameAndType(IRelation<?> relation, StringBuilder result, TaggingPreset preset) {
+        if (preset == null) {
             result.append(getRelationTypeName(relation));
             String relationName = getRelationName(relation);
             if (relationName == null) {
@@ -346,13 +345,13 @@ public class DefaultNameFormatter implements NameFormatter, HistoryNameFormatter
             }
             result.append(" (").append(relationName).append(", ");
         } else {
-            preset.nameTemplate.appendText(result, (TemplateEngineDataProvider) relation);
+            preset.nameTemplate.appendText(result, relation);
             result.append('(');
         }
         return result;
     }
 
-    private final Comparator<IRelation> relationComparator = (r1, r2) -> {
+    private final Comparator<IRelation<?>> relationComparator = (r1, r2) -> {
         //TODO This doesn't work correctly with formatHooks
 
         TaggingPreset preset1 = TaggingPresetNameTemplateList.getInstance().findPresetTemplate(r1);
@@ -395,11 +394,11 @@ public class DefaultNameFormatter implements NameFormatter, HistoryNameFormatter
     };
 
     @Override
-    public Comparator<IRelation> getRelationComparator() {
+    public Comparator<IRelation<?>> getRelationComparator() {
         return relationComparator;
     }
 
-    private static String getRelationTypeName(IRelation relation) {
+    private static String getRelationTypeName(IRelation<?> relation) {
         String name = trc("Relation type", relation.get("type"));
         if (name == null) {
             name = relation.hasKey("public_transport") ? tr("public transport") : null;
@@ -432,7 +431,7 @@ public class DefaultNameFormatter implements NameFormatter, HistoryNameFormatter
         return name;
     }
 
-    private static String getNameTagValue(IRelation relation, String nameTag) {
+    private static String getNameTagValue(IRelation<?> relation, String nameTag) {
         if ("name".equals(nameTag)) {
             if (Config.getPref().getBoolean("osm-primitives.localize-name", true))
                 return relation.getLocalName();
@@ -455,7 +454,7 @@ public class DefaultNameFormatter implements NameFormatter, HistoryNameFormatter
         }
     }
 
-    private static String getRelationName(IRelation relation) {
+    private static String getRelationName(IRelation<?> relation) {
         String nameTag;
         for (String n : getNamingtagsForRelations()) {
             nameTag = getNameTagValue(relation, n);

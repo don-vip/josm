@@ -8,6 +8,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
+import org.openstreetmap.josm.data.osm.INode;
 import org.openstreetmap.josm.data.osm.Node;
 import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.Relation;
@@ -101,18 +102,18 @@ public class PowerLines extends Test {
 
     protected final boolean isInPowerStation(Node n) {
         for (OsmPrimitive station : powerStations) {
-            List<List<Node>> nodesLists = new ArrayList<>();
+            List<List<? extends INode>> nodesLists = new ArrayList<>();
             if (station instanceof Way) {
                 nodesLists.add(((Way) station).getNodes());
             } else if (station instanceof Relation) {
-                Multipolygon polygon = MultipolygonCache.getInstance().get((Relation) station);
+                Multipolygon<?> polygon = MultipolygonCache.getInstance().get((Relation) station);
                 if (polygon != null) {
-                    for (JoinedWay outer : Multipolygon.joinWays(polygon.getOuterWays())) {
+                    for (JoinedWay<?> outer : Multipolygon.joinWays(polygon.getOuterWays())) {
                         nodesLists.add(outer.getNodes());
                     }
                 }
             }
-            for (List<Node> nodes : nodesLists) {
+            for (List<? extends INode> nodes : nodesLists) {
                 if (Geometry.nodeInsidePolygon(n, nodes)) {
                     return true;
                 }

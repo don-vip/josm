@@ -45,10 +45,12 @@ import javax.swing.FocusManager;
 import org.openstreetmap.josm.data.Bounds;
 import org.openstreetmap.josm.data.coor.EastNorth;
 import org.openstreetmap.josm.data.osm.BBox;
-import org.openstreetmap.josm.data.osm.DataSet;
 import org.openstreetmap.josm.data.osm.INode;
 import org.openstreetmap.josm.data.osm.IPrimitive;
+import org.openstreetmap.josm.data.osm.IRelation;
+import org.openstreetmap.josm.data.osm.IWay;
 import org.openstreetmap.josm.data.osm.Node;
+import org.openstreetmap.josm.data.osm.OsmData;
 import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.OsmUtils;
 import org.openstreetmap.josm.data.osm.Relation;
@@ -112,11 +114,11 @@ public class StyledMapRenderer extends AbstractMapRenderer {
      */
     public static class StyleRecord implements Comparable<StyleRecord> {
         private final StyleElement style;
-        private final OsmPrimitive osm;
+        private final IPrimitive osm;
         private final int flags;
         private final long order;
 
-        StyleRecord(StyleElement style, OsmPrimitive osm, int flags) {
+        StyleRecord(StyleElement style, IPrimitive osm, int flags) {
             this.style = style;
             this.osm = osm;
             this.flags = flags;
@@ -486,9 +488,9 @@ public class StyledMapRenderer extends AbstractMapRenderer {
      * @since 12285
      */
     public void drawArea(Relation r, Color color, MapImage fillImage, Float extent, Float extentThreshold, boolean disabled) {
-        Multipolygon multipolygon = MultipolygonCache.getInstance().get(r);
+        Multipolygon<?> multipolygon = MultipolygonCache.getInstance().get(r);
         if (!r.isDisabled() && !multipolygon.getOuterWays().isEmpty()) {
-            for (PolyData pd : multipolygon.getCombinedPolygons()) {
+            for (PolyData<?> pd : multipolygon.getCombinedPolygons()) {
                 if (!isAreaVisible(pd.get())) {
                     continue;
                 }
@@ -1197,9 +1199,9 @@ public class StyledMapRenderer extends AbstractMapRenderer {
         if (osm instanceof Way) {
             consumer.accept(getPath((Way) osm));
         } else if (osm instanceof Relation) {
-            Multipolygon multipolygon = MultipolygonCache.getInstance().get((Relation) osm);
+            Multipolygon<?> multipolygon = MultipolygonCache.getInstance().get((Relation) osm);
             if (!multipolygon.getOuterWays().isEmpty()) {
-                for (PolyData pd : multipolygon.getCombinedPolygons()) {
+                for (PolyData<?> pd : multipolygon.getCombinedPolygons()) {
                     MapViewPath path = new MapViewPath(mapState);
                     path.appendFromEastNorth(pd.get());
                     path.setWindingRule(MapViewPath.WIND_EVEN_ODD);
@@ -1423,11 +1425,11 @@ public class StyledMapRenderer extends AbstractMapRenderer {
         return clip;
     }
 
-    private static Path2D.Double getPFClip(PolyData pd, double extent) {
+    private static Path2D.Double getPFClip(PolyData<? extends INode> pd, double extent) {
         Path2D.Double clip = new Path2D.Double();
         clip.setWindingRule(Path2D.WIND_EVEN_ODD);
         buildPFClip(clip, pd.getNodes(), extent);
-        for (PolyData pdInner : pd.getInners()) {
+        for (PolyData<?> pdInner : pd.getInners()) {
             buildPFClip(clip, pdInner.getNodes(), extent);
         }
         return clip;
@@ -1448,9 +1450,9 @@ public class StyledMapRenderer extends AbstractMapRenderer {
      * @param nodes nodes of the polygon
      * @param extent the extent
      */
-    private static void buildPFClip(Path2D.Double clip, List<Node> nodes, double extent) {
+    private static void buildPFClip(Path2D.Double clip, List<? extends INode> nodes, double extent) {
         boolean initial = true;
-        for (Node n : nodes) {
+        for (INode n : nodes) {
             EastNorth p = n.getEastNorth();
             if (p != null) {
                 if (initial) {
@@ -1586,7 +1588,8 @@ public class StyledMapRenderer extends AbstractMapRenderer {
     }
 
     @Override
-    public void render(final DataSet data, boolean renderVirtualNodes, Bounds bounds) {
+    public void render(final OsmData<?, ? extends INode, ? extends IWay<?, ?>, ? extends IRelation<?>> data,
+            boolean renderVirtualNodes, Bounds bounds) {
         RenderBenchmarkCollector benchmark = benchmarkFactory.get();
         BBox bbox = bounds.toBBox();
         getSettings(renderVirtualNodes);
@@ -1606,16 +1609,16 @@ public class StyledMapRenderer extends AbstractMapRenderer {
         }
     }
 
-    private void paintWithLock(final DataSet data, boolean renderVirtualNodes, RenderBenchmarkCollector benchmark,
-            BBox bbox) {
+    private void paintWithLock(final OsmData<?, ? extends INode, ? extends IWay<?, ?>, ? extends IRelation<?>> data,
+            boolean renderVirtualNodes, RenderBenchmarkCollector benchmark, BBox bbox) {
         try {
             highlightWaySegments = data.getHighlightedWaySegments();
 
             benchmark.renderStart(circum);
 
-            List<Node> nodes = data.searchNodes(bbox);
-            List<Way> ways = data.searchWays(bbox);
-            List<Relation> relations = data.searchRelations(bbox);
+            List<? extends INode> nodes = data.searchNodes(bbox);
+            List<? extends IWay<?, ?>> ways = data.searchWays(bbox);
+            List<? extends IRelation<?>> relations = data.searchRelations(bbox);
 
             final List<StyleRecord> allStyleElems = new ArrayList<>(nodes.size()+ways.size()+relations.size());
 

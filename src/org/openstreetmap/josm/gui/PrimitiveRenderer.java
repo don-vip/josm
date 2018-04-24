@@ -14,7 +14,6 @@ import javax.swing.table.TableCellRenderer;
 
 import org.openstreetmap.josm.data.osm.DefaultNameFormatter;
 import org.openstreetmap.josm.data.osm.IPrimitive;
-import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.history.HistoryOsmPrimitive;
 import org.openstreetmap.josm.tools.ImageProvider;
 import org.openstreetmap.josm.tools.Logging;
@@ -76,9 +75,9 @@ public class PrimitiveRenderer implements ListCellRenderer<IPrimitive>, TableCel
     private Component renderer(Component def, IPrimitive value, boolean fast) {
         if (value != null && def instanceof JLabel) {
             ((JLabel) def).setText(getComponentText(value));
-            final ImageIcon icon = (fast || !(value instanceof OsmPrimitive))
+            final ImageIcon icon = fast
                     ? ImageProvider.get(value.getType())
-                    : ImageProvider.getPadded((OsmPrimitive) value,
+                    : ImageProvider.getPadded(value,
                         // Height of component no yet known, assume the default 16px.
                         ImageProvider.ImageSizes.SMALLICON.getImageDimension());
             if (icon != null) {

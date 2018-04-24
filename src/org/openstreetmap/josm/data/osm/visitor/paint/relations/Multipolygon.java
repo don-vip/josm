@@ -16,11 +16,13 @@ import java.util.Set;
 import org.openstreetmap.josm.Main;
 import org.openstreetmap.josm.data.coor.EastNorth;
 import org.openstreetmap.josm.data.osm.DataSet;
+import org.openstreetmap.josm.data.osm.INode;
+import org.openstreetmap.josm.data.osm.IRelation;
+import org.openstreetmap.josm.data.osm.IRelationMember;
+import org.openstreetmap.josm.data.osm.IWay;
 import org.openstreetmap.josm.data.osm.Node;
+import org.openstreetmap.josm.data.osm.OsmData;
 import org.openstreetmap.josm.data.osm.OsmPrimitiveType;
-import org.openstreetmap.josm.data.osm.Relation;
-import org.openstreetmap.josm.data.osm.RelationMember;
-import org.openstreetmap.josm.data.osm.Way;
 import org.openstreetmap.josm.data.osm.event.NodeMovedEvent;
 import org.openstreetmap.josm.data.osm.event.WayNodesChangedEvent;
 import org.openstreetmap.josm.data.osm.visitor.paint.relations.Multipolygon.PolyData.Intersection;
@@ -34,9 +36,10 @@ import org.openstreetmap.josm.tools.Logging;
 
 /**
  * Multipolygon data used to represent complex areas, see <a href="https://wiki.openstreetmap.org/wiki/Relation:multipolygon">wiki</a>.
+ * @param <N> type of OSM node
  * @since 2788
  */
-public class Multipolygon {
+public class Multipolygon<N extends INode> {
 
     /** preference key for a collection of roles which indicate that the respective member belongs to an
      * <em>outer</em> polygon. Default is <code>outer</code>.
@@ -170,9 +173,10 @@ public class Multipolygon {
      *
      * The last node of one way is the first way of the next one.
      * The string may or may not be closed.
+     * @param <N> type of OSM node
      */
-    public static class JoinedWay {
-        protected final List<Node> nodes;
+    public static class JoinedWay<N extends INode> {
+        protected final List<N> nodes;
         protected final Collection<Long> wayIds;
         protected boolean selected;
 
@@ -182,7 +186,7 @@ public class Multipolygon {
          * @param wayIds list of way IDs - must not be null
          * @param selected whether joined way is selected or not
          */
-        public JoinedWay(List<Node> nodes, Collection<Long> wayIds, boolean selected) {
+        public JoinedWay(List<N> nodes, Collection<Long> wayIds, boolean selected) {
             this.nodes = new ArrayList<>(nodes);
             this.wayIds = new ArrayList<>(wayIds);
             this.selected = selected;
@@ -192,7 +196,7 @@ public class Multipolygon {
          * Replies the list of nodes.
          * @return the list of nodes
          */
-        public List<Node> getNodes() {
+        public List<N> getNodes() {
             return Collections.unmodifiableList(nodes);
         }
 
@@ -234,7 +238,7 @@ public class Multipolygon {
          * @return the first node
          * @since 10312
          */
-        public Node getFirstNode() {
+        public N getFirstNode() {
             return nodes.get(0);
         }
 
@@ -243,7 +247,7 @@ public class Multipolygon {
          * @return the last node
          * @since 10312
          */
-        public Node getLastNode() {
+        public N getLastNode() {
             return nodes.get(nodes.size() - 1);
         }
     }
@@ -251,10 +255,12 @@ public class Multipolygon {
     /**
      * The polygon data for a multipolygon part.
      * It contains the outline of this polygon in east/north space.
+     * @param <N> type of OSM node
      */
-    public static class PolyData extends JoinedWay {
+    public static class PolyData<N extends INode> extends JoinedWay<N> {
         /**
-         * The intersection type used for {@link PolyData#contains(java.awt.geom.Path2D.Double)}
+         * The intersection type used for
+         * {@link org.openstreetmap.josm.data.osm.visitor.paint.relations.Multipolygon.PolyData#contains(java.awt.geom.Path2D.Double)}
          */
         public enum Intersection {
             /**
@@ -273,25 +279,26 @@ public class Multipolygon {
 
         private final Path2D.Double poly;
         private Rectangle2D bounds;
-        private final List<PolyData> inners;
+        private final List<PolyData<N>> inners;
 
         /**
          * Constructs a new {@code PolyData} from a closed way.
          * @param closedWay closed way
          */
-        public PolyData(Way closedWay) {
-            this(closedWay.getNodes(), closedWay.isSelected(), Collections.singleton(closedWay.getUniqueId()));
+        public PolyData(IWay<?, N> closedWay) {
+            this(closedWay.getRealNodes(), closedWay.isSelected(), Collections.singleton(closedWay.getUniqueId()));
         }
 
         /**
-         * Constructs a new {@code PolyData} from a {@link JoinedWay}.
+         * Constructs a new {@code PolyData} from a
+         * {@link org.openstreetmap.josm.data.osm.visitor.paint.relations.Multipolygon.JoinedWay}.
          * @param joinedWay joined way
          */
-        public PolyData(JoinedWay joinedWay) {
+        public PolyData(JoinedWay<N> joinedWay) {
             this(joinedWay.nodes, joinedWay.selected, joinedWay.wayIds);
         }
 
-        private PolyData(List<Node> nodes, boolean selected, Collection<Long> wayIds) {
+        private PolyData(List<N> nodes, boolean selected, Collection<Long> wayIds) {
             super(nodes, wayIds, selected);
             this.inners = new ArrayList<>();
             this.poly = new Path2D.Double();
@@ -303,7 +310,7 @@ public class Multipolygon {
          * Constructs a new {@code PolyData} from an existing {@code PolyData}.
          * @param copy existing instance
          */
-        public PolyData(PolyData copy) {
+        public PolyData(PolyData<N> copy) {
             super(copy.nodes, copy.wayIds, copy.selected);
             this.poly = (Path2D.Double) copy.poly.clone();
             this.inners = new ArrayList<>(copy.inners);
@@ -311,7 +318,7 @@ public class Multipolygon {
 
         private void buildPoly() {
             boolean initial = true;
-            for (Node n : nodes) {
+            for (INode n : nodes) {
                 EastNorth p = n.getEastNorth();
                 if (p != null) {
                     if (initial) {
@@ -325,7 +332,7 @@ public class Multipolygon {
             if (nodes.size() >= 3 && nodes.get(0) == nodes.get(nodes.size() - 1)) {
                 poly.closePath();
             }
-            for (PolyData inner : inners) {
+            for (PolyData<N> inner : inners) {
                 appendInner(inner.poly);
             }
         }
@@ -360,7 +367,7 @@ public class Multipolygon {
          * Adds an inner polygon
          * @param inner The polygon to add as inner polygon.
          */
-        public void addInner(PolyData inner) {
+        public void addInner(PolyData<N> inner) {
             inners.add(inner);
             appendInner(inner.poly);
         }
@@ -392,15 +399,16 @@ public class Multipolygon {
          * Gets a list of all inner polygons.
          * @return The inner polygons.
          */
-        public List<PolyData> getInners() {
+        public List<PolyData<N>> getInners() {
             return Collections.unmodifiableList(inners);
         }
 
+        @SuppressWarnings("unchecked")
         private void resetNodes(DataSet dataSet) {
             if (!nodes.isEmpty()) {
-                DataSet ds = dataSet;
+                OsmData<?, ?, ?, ?> ds = dataSet;
                 // Find DataSet (can be null for several nodes when undoing nodes creation, see #7162)
-                for (Iterator<Node> it = nodes.iterator(); it.hasNext() && ds == null;) {
+                for (Iterator<N> it = nodes.iterator(); it.hasNext() && ds == null;) {
                     ds = it.next().getDataSet();
                 }
                 nodes.clear();
@@ -409,12 +417,12 @@ public class Multipolygon {
                     Logging.warn("DataSet not found while resetting nodes in Multipolygon. " +
                             "This should not happen, you may report it to JOSM developers.");
                 } else if (wayIds.size() == 1) {
-                    Way w = (Way) ds.getPrimitiveById(wayIds.iterator().next(), OsmPrimitiveType.WAY);
-                    nodes.addAll(w.getNodes());
+                    IWay<?, N> w = (IWay<?, N>) ds.getPrimitiveById(wayIds.iterator().next(), OsmPrimitiveType.WAY);
+                    nodes.addAll(w.getRealNodes());
                 } else if (!wayIds.isEmpty()) {
-                    List<Way> waysToJoin = new ArrayList<>();
+                    List<IWay<?, N>> waysToJoin = new ArrayList<>();
                     for (Long wayId : wayIds) {
-                        Way w = (Way) ds.getPrimitiveById(wayId, OsmPrimitiveType.WAY);
+                        IWay<?, N> w = (IWay<?, N>) ds.getPrimitiveById(wayId, OsmPrimitiveType.WAY);
                         if (w != null && w.getNodesCount() > 0) { // fix #7173 (empty ways on purge)
                             waysToJoin.add(w);
                         }
@@ -440,7 +448,7 @@ public class Multipolygon {
         public void nodeMoved(NodeMovedEvent event) {
             final Node n = event.getNode();
             boolean innerChanged = false;
-            for (PolyData inner : inners) {
+            for (PolyData<N> inner : inners) {
                 if (inner.nodes.contains(n)) {
                     inner.resetPoly();
                     innerChanged = true;
@@ -458,7 +466,7 @@ public class Multipolygon {
         public void wayNodesChanged(WayNodesChangedEvent event) {
             final Long wayId = event.getChangedWay().getUniqueId();
             boolean innerChanged = false;
-            for (PolyData inner : inners) {
+            for (PolyData<N> inner : inners) {
                 if (inner.wayIds.contains(wayId)) {
                     inner.resetNodes(event.getDataset());
                     innerChanged = true;
@@ -473,7 +481,7 @@ public class Multipolygon {
         public boolean isClosed() {
             if (nodes.size() < 3 || !getFirstNode().equals(getLastNode()))
                 return false;
-            for (PolyData inner : inners) {
+            for (PolyData<N> inner : inners) {
                 if (!inner.isClosed())
                     return false;
             }
@@ -490,7 +498,7 @@ public class Multipolygon {
             AreaAndPerimeter ap = Geometry.getAreaAndPerimeter(nodes, projection);
             double area = ap.getArea();
             double perimeter = ap.getPerimeter();
-            for (PolyData inner : inners) {
+            for (PolyData<N> inner : inners) {
                 AreaAndPerimeter apInner = inner.getAreaAndPerimeter(projection);
                 area -= apInner.getArea();
                 perimeter += apInner.getPerimeter();
@@ -499,10 +507,10 @@ public class Multipolygon {
         }
     }
 
-    private final List<Way> innerWays = new ArrayList<>();
-    private final List<Way> outerWays = new ArrayList<>();
-    private final List<PolyData> combinedPolygons = new ArrayList<>();
-    private final List<Node> openEnds = new ArrayList<>();
+    private final List<IWay<?, N>> innerWays = new ArrayList<>();
+    private final List<IWay<?, N>> outerWays = new ArrayList<>();
+    private final List<PolyData<N>> combinedPolygons = new ArrayList<>();
+    private final List<N> openEnds = new ArrayList<>();
 
     private boolean incomplete;
 
@@ -510,19 +518,19 @@ public class Multipolygon {
      * Constructs a new {@code Multipolygon} from a relation.
      * @param r relation
      */
-    public Multipolygon(Relation r) {
+    public Multipolygon(IRelation<? extends IRelationMember<?, N, ?, ?>> r) {
         load(r);
     }
 
-    private void load(Relation r) {
+    private void load(IRelation<? extends IRelationMember<?, N, ?, ?>> r) {
         MultipolygonRoleMatcher matcher = getMultipolygonRoleMatcher();
 
         // Fill inner and outer list with valid ways
-        for (RelationMember m : r.getMembers()) {
+        for (IRelationMember<?, N, ?, ?> m : r.getMembers()) {
             if (m.getMember().isIncomplete()) {
                 this.incomplete = true;
             } else if (m.getMember().isDrawable() && m.isWay()) {
-                Way w = m.getWay();
+                IWay<?, N> w = m.getWay();
 
                 if (w.getNodesCount() < 2) {
                     continue;
@@ -536,8 +544,8 @@ public class Multipolygon {
             } // Non ways ignored
         }
 
-        final List<PolyData> innerPolygons = new ArrayList<>();
-        final List<PolyData> outerPolygons = new ArrayList<>();
+        final List<PolyData<N>> innerPolygons = new ArrayList<>();
+        final List<PolyData<N>> outerPolygons = new ArrayList<>();
         createPolygons(innerWays, innerPolygons);
         createPolygons(outerWays, outerPolygons);
         if (!outerPolygons.isEmpty()) {
@@ -553,18 +561,18 @@ public class Multipolygon {
         return incomplete;
     }
 
-    private void createPolygons(List<Way> ways, List<PolyData> result) {
-        List<Way> waysToJoin = new ArrayList<>();
-        for (Way way: ways) {
+    private void createPolygons(List<IWay<?, N>> ways, List<PolyData<N>> result) {
+        List<IWay<?, N>> waysToJoin = new ArrayList<>();
+        for (IWay<?, N> way: ways) {
             if (way.isClosed()) {
-                result.add(new PolyData(way));
+                result.add(new PolyData<>(way));
             } else {
                 waysToJoin.add(way);
             }
         }
 
-        for (JoinedWay jw: joinWays(waysToJoin)) {
-            result.add(new PolyData(jw));
+        for (JoinedWay<N> jw: joinWays(waysToJoin)) {
+            result.add(new PolyData<>(jw));
             if (!jw.isClosed()) {
                 openEnds.add(jw.getFirstNode());
                 openEnds.add(jw.getLastNode());
@@ -574,24 +582,26 @@ public class Multipolygon {
 
     /**
      * Attempt to combine the ways in the list if they share common end nodes
+     * @param <N> type of OSM node
      * @param waysToJoin The ways to join
      * @return A collection of {@link JoinedWay} objects indicating the possible join of those ways
      */
-    public static Collection<JoinedWay> joinWays(Collection<Way> waysToJoin) {
-        final Collection<JoinedWay> result = new ArrayList<>();
-        final Way[] joinArray = waysToJoin.toArray(new Way[0]);
+    public static <N extends INode> Collection<JoinedWay<N>> joinWays(Collection<? extends IWay<?, N>> waysToJoin) {
+        final Collection<JoinedWay<N>> result = new ArrayList<>();
+        final IWay<?, ?>[] joinArray = waysToJoin.toArray(new IWay<?, ?>[0]);
         int left = waysToJoin.size();
         while (left > 0) {
-            Way w = null;
+            IWay<?, N> w = null;
             boolean selected = false;
-            List<Node> nodes = null;
+            List<N> nodes = null;
             Set<Long> wayIds = new HashSet<>();
             boolean joined = true;
             while (joined && left > 0) {
                 joined = false;
                 for (int i = 0; i < joinArray.length && left != 0; ++i) {
                     if (joinArray[i] != null) {
-                        Way c = joinArray[i];
+                        @SuppressWarnings("unchecked")
+                        IWay<?, N> c = (IWay<?, N>) joinArray[i];
                         if (c.getNodesCount() == 0) {
                             continue;
                         }
@@ -635,20 +645,20 @@ public class Multipolygon {
                                 }
                                 --left;
                                 if (nodes == null) {
-                                    nodes = w.getNodes();
+                                    nodes = w.getRealNodes();
                                     wayIds.add(w.getUniqueId());
                                 }
                                 nodes.remove((mode == 21 || mode == 22) ? nl : 0);
                                 if (mode == 21) {
-                                    nodes.addAll(c.getNodes());
+                                    nodes.addAll(c.getRealNodes());
                                 } else if (mode == 12) {
-                                    nodes.addAll(0, c.getNodes());
+                                    nodes.addAll(0, c.getRealNodes());
                                 } else if (mode == 22) {
-                                    for (Node node : c.getNodes()) {
+                                    for (N node : c.getRealNodes()) {
                                         nodes.add(nl, node);
                                     }
                                 } else /* mode == 11 */ {
-                                    for (Node node : c.getNodes()) {
+                                    for (N node : c.getRealNodes()) {
                                         nodes.add(0, node);
                                     }
                                 }
@@ -660,12 +670,12 @@ public class Multipolygon {
             }
 
             if (nodes == null && w != null) {
-                nodes = w.getNodes();
+                nodes = w.getRealNodes();
                 wayIds.add(w.getUniqueId());
             }
 
             if (nodes != null) {
-                result.add(new JoinedWay(nodes, wayIds, selected));
+                result.add(new JoinedWay<>(nodes, wayIds, selected));
             }
         }
 
@@ -678,15 +688,15 @@ public class Multipolygon {
      * @param outerPolygons The possible outer polygons
      * @return The outer polygon that was found or <code>null</code> if none was found.
      */
-    public PolyData findOuterPolygon(PolyData inner, List<PolyData> outerPolygons) {
+    public PolyData<N> findOuterPolygon(PolyData<N> inner, List<PolyData<N>> outerPolygons) {
         // First try to test only bbox, use precise testing only if we don't get unique result
         Rectangle2D innerBox = inner.getBounds();
-        PolyData insidePolygon = null;
-        PolyData intersectingPolygon = null;
+        PolyData<N> insidePolygon = null;
+        PolyData<N> intersectingPolygon = null;
         int insideCount = 0;
         int intersectingCount = 0;
 
-        for (PolyData outer: outerPolygons) {
+        for (PolyData<N> outer: outerPolygons) {
             if (outer.getBounds().contains(innerBox)) {
                 insidePolygon = outer;
                 insideCount++;
@@ -701,8 +711,8 @@ public class Multipolygon {
         else if (intersectingCount == 1)
             return intersectingPolygon;
 
-        PolyData result = null;
-        for (PolyData combined : outerPolygons) {
+        PolyData<N> result = null;
+        for (PolyData<N> combined : outerPolygons) {
             if (combined.contains(inner.poly) != Intersection.OUTSIDE
                     && (result == null || result.contains(combined.poly) == Intersection.INSIDE)) {
                 result = combined;
@@ -711,21 +721,21 @@ public class Multipolygon {
         return result;
     }
 
-    private void addInnerToOuters(List<PolyData> innerPolygons, List<PolyData> outerPolygons) {
+    private void addInnerToOuters(List<PolyData<N>> innerPolygons, List<PolyData<N>> outerPolygons) {
         if (innerPolygons.isEmpty()) {
             combinedPolygons.addAll(outerPolygons);
         } else if (outerPolygons.size() == 1) {
-            PolyData combinedOuter = new PolyData(outerPolygons.get(0));
-            for (PolyData inner: innerPolygons) {
+            PolyData<N> combinedOuter = new PolyData<>(outerPolygons.get(0));
+            for (PolyData<N> inner: innerPolygons) {
                 combinedOuter.addInner(inner);
             }
             combinedPolygons.add(combinedOuter);
         } else {
-            for (PolyData outer: outerPolygons) {
-                combinedPolygons.add(new PolyData(outer));
+            for (PolyData<N> outer: outerPolygons) {
+                combinedPolygons.add(new PolyData<>(outer));
             }
 
-            for (PolyData pdInner: innerPolygons) {
+            for (PolyData<N> pdInner: innerPolygons) {
                 Optional.ofNullable(findOuterPolygon(pdInner, combinedPolygons)).orElseGet(() -> outerPolygons.get(0))
                     .addInner(pdInner);
             }
@@ -736,7 +746,7 @@ public class Multipolygon {
      * Replies the list of outer ways.
      * @return the list of outer ways
      */
-    public List<Way> getOuterWays() {
+    public List<IWay<?, N>> getOuterWays() {
         return Collections.unmodifiableList(outerWays);
     }
 
@@ -744,7 +754,7 @@ public class Multipolygon {
      * Replies the list of inner ways.
      * @return the list of inner ways
      */
-    public List<Way> getInnerWays() {
+    public List<IWay<?, N>> getInnerWays() {
         return Collections.unmodifiableList(innerWays);
     }
 
@@ -752,7 +762,7 @@ public class Multipolygon {
      * Replies the list of combined polygons.
      * @return the list of combined polygons
      */
-    public List<PolyData> getCombinedPolygons() {
+    public List<PolyData<N>> getCombinedPolygons() {
         return Collections.unmodifiableList(combinedPolygons);
     }
 
@@ -760,8 +770,8 @@ public class Multipolygon {
      * Replies the list of inner polygons.
      * @return the list of inner polygons
      */
-    public List<PolyData> getInnerPolygons() {
-        final List<PolyData> innerPolygons = new ArrayList<>();
+    public List<PolyData<N>> getInnerPolygons() {
+        final List<PolyData<N>> innerPolygons = new ArrayList<>();
         createPolygons(innerWays, innerPolygons);
         return innerPolygons;
     }
@@ -770,8 +780,8 @@ public class Multipolygon {
      * Replies the list of outer polygons.
      * @return the list of outer polygons
      */
-    public List<PolyData> getOuterPolygons() {
-        final List<PolyData> outerPolygons = new ArrayList<>();
+    public List<PolyData<N>> getOuterPolygons() {
+        final List<PolyData<N>> outerPolygons = new ArrayList<>();
         createPolygons(outerWays, outerPolygons);
         return outerPolygons;
     }
@@ -780,7 +790,7 @@ public class Multipolygon {
      * Returns the start and end node of non-closed rings.
      * @return the start and end node of non-closed rings.
      */
-    public List<Node> getOpenEnds() {
+    public List<N> getOpenEnds() {
         return Collections.unmodifiableList(openEnds);
     }
 }

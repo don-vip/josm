@@ -9,7 +9,7 @@ import java.util.Optional;
 import javax.swing.Icon;
 import javax.swing.JLabel;
 
-import org.openstreetmap.josm.data.osm.OsmPrimitive;
+import org.openstreetmap.josm.data.osm.IPrimitive;
 import org.openstreetmap.josm.tools.ImageProvider;
 
 /**
@@ -35,13 +35,13 @@ public class MultipleNameVisitor extends NameVisitor {
      * Visits a collection of primitives
      * @param data The collection of primitives
      */
-    public void visit(Collection<? extends OsmPrimitive> data) {
+    public void visit(Collection<? extends IPrimitive> data) {
         StringBuilder multipleName = new StringBuilder();
         String multiplePluralClassname = null;
         size = data.size();
 
         multipleClassname = null;
-        for (OsmPrimitive osm : data) {
+        for (IPrimitive osm : data) {
             String name = Optional.ofNullable(osm.get("name")).orElseGet(() -> osm.get("ref"));
             if (name != null && !name.isEmpty() && multipleName.length() <= MULTIPLE_NAME_MAX_LENGTH) {
                 if (multipleName.length() > 0) {

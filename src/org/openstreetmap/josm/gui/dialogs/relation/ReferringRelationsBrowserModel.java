@@ -8,19 +8,21 @@ import javax.swing.AbstractListModel;
 
 import org.openstreetmap.josm.data.osm.DataSet;
 import org.openstreetmap.josm.data.osm.DownloadPolicy;
+import org.openstreetmap.josm.data.osm.IRelation;
+import org.openstreetmap.josm.data.osm.IRelationMember;
+import org.openstreetmap.josm.data.osm.OsmData;
 import org.openstreetmap.josm.data.osm.Relation;
-import org.openstreetmap.josm.data.osm.RelationMember;
 
 /**
  * This is the model for the {@link ReferringRelationsBrowser}.
  * <p>
  * It holds all referrers to a given relation
  */
-public class ReferringRelationsBrowserModel extends AbstractListModel<Relation> {
+public class ReferringRelationsBrowserModel extends AbstractListModel<IRelation<?>> {
 
     /** the relation */
     private transient Relation relation;
-    private final transient List<Relation> referrers = new ArrayList<>();
+    private final transient List<IRelation<?>> referrers = new ArrayList<>();
 
     /**
      * Constructs a new {@code ReferringRelationsBrowserModel}.
@@ -46,7 +48,7 @@ public class ReferringRelationsBrowserModel extends AbstractListModel<Relation> 
     }
 
     @Override
-    public Relation getElementAt(int index) {
+    public IRelation<?> getElementAt(int index) {
         return referrers.get(index);
     }
 
@@ -55,13 +57,11 @@ public class ReferringRelationsBrowserModel extends AbstractListModel<Relation> 
         return referrers.size();
     }
 
-    protected boolean isReferringRelation(Relation parent) {
+    protected boolean isReferringRelation(IRelation<?> parent) {
         if (parent == null) return false;
-        for (RelationMember m: parent.getMembers()) {
-            if (m.isRelation()) {
-                Relation child = m.getRelation();
-                if (child.equals(relation)) return true;
-            }
+        for (IRelationMember<?, ?, ?, ?> m: parent.getMembers()) {
+            if (m.isRelation() && m.getRelation().equals(relation))
+                return true;
         }
         return false;
     }
@@ -87,13 +87,13 @@ public class ReferringRelationsBrowserModel extends AbstractListModel<Relation> 
      *
      * @param ds the data set
      */
-    public void populate(DataSet ds) {
+    public void populate(OsmData<?, ?, ?, ?> ds) {
         referrers.clear();
         if (ds == null) {
             fireModelUpdate();
             return;
         }
-        for (Relation parent : ds.getRelations()) {
+        for (IRelation<?> parent : ds.getRelations()) {
             if (isReferringRelation(parent)) {
                 referrers.add(parent);
             }

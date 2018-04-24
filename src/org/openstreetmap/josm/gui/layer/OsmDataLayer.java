@@ -63,16 +63,20 @@ import org.openstreetmap.josm.data.gpx.WayPoint;
 import org.openstreetmap.josm.data.osm.DataIntegrityProblemException;
 import org.openstreetmap.josm.data.osm.DataSelectionListener;
 import org.openstreetmap.josm.data.osm.DataSet;
-import org.openstreetmap.josm.data.osm.DownloadPolicy;
-import org.openstreetmap.josm.data.osm.UploadPolicy;
 import org.openstreetmap.josm.data.osm.DataSetMerger;
 import org.openstreetmap.josm.data.osm.DatasetConsistencyTest;
+import org.openstreetmap.josm.data.osm.DownloadPolicy;
 import org.openstreetmap.josm.data.osm.HighlightUpdateListener;
+import org.openstreetmap.josm.data.osm.INode;
 import org.openstreetmap.josm.data.osm.IPrimitive;
+import org.openstreetmap.josm.data.osm.IRelation;
+import org.openstreetmap.josm.data.osm.IWay;
 import org.openstreetmap.josm.data.osm.Node;
+import org.openstreetmap.josm.data.osm.OsmData;
 import org.openstreetmap.josm.data.osm.OsmPrimitive;
-import org.openstreetmap.josm.data.osm.OsmPrimitiveComparator;
+import org.openstreetmap.josm.data.osm.PrimitiveComparator;
 import org.openstreetmap.josm.data.osm.Relation;
+import org.openstreetmap.josm.data.osm.UploadPolicy;
 import org.openstreetmap.josm.data.osm.Way;
 import org.openstreetmap.josm.data.osm.event.AbstractDatasetChangedEvent;
 import org.openstreetmap.josm.data.osm.event.DataSetListenerAdapter;
@@ -193,7 +197,7 @@ public class OsmDataLayer extends AbstractModifiableLayer implements Listener, D
      * @param relation relation to remove
      * @since 9668
      */
-    public void removeRecentRelation(Relation relation) {
+    public void removeRecentRelation(IRelation<?> relation) {
         recentRelations.remove(relation);
         MapFrame map = MainApplication.getMap();
         if (map != null && map.relationListDialog != null) {
@@ -343,7 +347,7 @@ public class OsmDataLayer extends AbstractModifiableLayer implements Listener, D
     /**
      * The data behind this layer.
      */
-    public final DataSet data;
+    public final OsmData<OsmPrimitive, Node, Way, Relation> data; // FIXME
 
     /**
      * a texture for non-downloaded area
@@ -396,7 +400,7 @@ public class OsmDataLayer extends AbstractModifiableLayer implements Listener, D
         super(name);
         CheckParameterUtil.ensureParameterNotNull(data, "data");
         this.data = data;
-        this.data.setName(name);
+        data.setName(name);
         this.setAssociatedFile(associatedFile);
         data.addDataSetListener(new DataSetListenerAdapter(this));
         data.addDataSetListener(MultipolygonCache.getInstance());
@@ -414,12 +418,12 @@ public class OsmDataLayer extends AbstractModifiableLayer implements Listener, D
     }
 
     /**
-     * Returns the {@link DataSet} behind this layer.
-     * @return the {@link DataSet} behind this layer.
+     * Returns the {@link DataSet} behind this layer, if {@link data} is an instance of this class.
+     * @return {@link #data} as a {@link DataSet}, if it is an instance of this class, or {@code null}.
      * @since 13558
      */
     public DataSet getDataSet() {
-        return data;
+        return data instanceof DataSet ? (DataSet) data : null;
     }
 
     /**
@@ -525,7 +529,7 @@ public class OsmDataLayer extends AbstractModifiableLayer implements Listener, D
         if (from instanceof OsmDataLayer && ((OsmDataLayer) from).isUploadDiscouraged()) {
             setUploadDiscouraged(true);
         }
-        mergeFrom(((OsmDataLayer) from).data, monitor);
+        mergeFrom(((OsmDataLayer) from).getDataSet(), monitor);
         monitor.close();
     }
 
@@ -546,7 +550,7 @@ public class OsmDataLayer extends AbstractModifiableLayer implements Listener, D
      * @param progressMonitor the progress monitor, can be {@code null}
      */
     public void mergeFrom(final DataSet from, ProgressMonitor progressMonitor) {
-        final DataSetMerger visitor = new DataSetMerger(data, from);
+        final DataSetMerger visitor = new DataSetMerger(getDataSet(), from);
         try {
             visitor.merge(progressMonitor);
         } catch (DataIntegrityProblemException e) {
@@ -562,9 +566,9 @@ public class OsmDataLayer extends AbstractModifiableLayer implements Listener, D
 
         int numNewConflicts = 0;
         for (Conflict<?> c : visitor.getConflicts()) {
-            if (!data.getConflicts().hasConflict(c)) {
+            if (!getDataSet().getConflicts().hasConflict(c)) {
                 numNewConflicts++;
-                data.getConflicts().add(c);
+                getDataSet().getConflicts().add(c);
             }
         }
         // repaint to make sure new data is displayed properly.
@@ -604,19 +608,22 @@ public class OsmDataLayer extends AbstractModifiableLayer implements Listener, D
         if (processed == null || processed.isEmpty())
             return;
 
-        MainApplication.undoRedo.clean(data);
+        DataSet ds = getDataSet();
+        if (ds != null) {
+            MainApplication.undoRedo.clean(ds);
 
-        // if uploaded, clean the modified flags as well
-        data.cleanupDeletedPrimitives();
-        data.beginUpdate();
-        try {
-            for (OsmPrimitive p: data.allPrimitives()) {
-                if (processed.contains(p)) {
-                    p.setModified(false);
+            // if uploaded, clean the modified flags as well
+            ds.cleanupDeletedPrimitives();
+            ds.beginUpdate();
+            try {
+                for (OsmPrimitive p: ds.allPrimitives()) {
+                    if (processed.contains(p)) {
+                        p.setModified(false);
+                    }
                 }
+            } finally {
+                ds.endUpdate();
             }
-        } finally {
-            data.endUpdate();
         }
     }
 
@@ -694,24 +701,24 @@ public class OsmDataLayer extends AbstractModifiableLayer implements Listener, D
      * @param file output .gpx file
      * @return GPX data
      */
-    public static GpxData toGpxData(DataSet data, File file) {
+    public static GpxData toGpxData(OsmData<?, ? extends INode, ? extends IWay<?, ?>, ?> data, File file) {
         GpxData gpxData = new GpxData();
         gpxData.storageFile = file;
-        Set<Node> doneNodes = new HashSet<>();
-        waysToGpxData(data.getWays(), gpxData, doneNodes);
-        nodesToGpxData(data.getNodes(), gpxData, doneNodes);
+        Set<INode> doneNodes = new HashSet<>();
+        waysToGpxData(data, gpxData, doneNodes);
+        nodesToGpxData(data, gpxData, doneNodes);
         return gpxData;
     }
 
-    private static void waysToGpxData(Collection<Way> ways, GpxData gpxData, Set<Node> doneNodes) {
+    private static void waysToGpxData(OsmData<?, ? extends INode, ? extends IWay<?, ?>, ?> data, GpxData gpxData, Set<INode> doneNodes) {
         /* When the dataset has been obtained from a gpx layer and now is being converted back,
          * the ways have negative ids. The first created way corresponds to the first gpx segment,
          * and has the highest id (i.e., closest to zero).
          * Thus, sorting by OsmPrimitive#getUniqueId gives the original order.
          * (Only works if the data layer has not been saved to and been loaded from an osm file before.)
          */
-        ways.stream()
-                .sorted(OsmPrimitiveComparator.comparingUniqueId().reversed())
+        data.getWays().stream()
+                .sorted(PrimitiveComparator.comparingUniqueId().reversed())
                 .forEachOrdered(w -> {
             if (!w.isUsable()) {
                 return;
@@ -725,7 +732,7 @@ public class OsmDataLayer extends AbstractModifiableLayer implements Listener, D
             }
 
             List<WayPoint> trkseg = null;
-            for (Node n : w.getNodes()) {
+            for (INode n : w.getRealNodes()) {
                 if (!n.isUsable()) {
                     trkseg = null;
                     continue;
@@ -749,7 +756,7 @@ public class OsmDataLayer extends AbstractModifiableLayer implements Listener, D
      * @return {@code WayPoint} object
      * @since 13210
      */
-    public static WayPoint nodeToWayPoint(Node n) {
+    public static WayPoint nodeToWayPoint(INode n) {
         return nodeToWayPoint(n, 0);
     }
 
@@ -759,7 +766,7 @@ public class OsmDataLayer extends AbstractModifiableLayer implements Listener, D
      * @return {@code WayPoint} object
      * @since 13210
      */
-    public static WayPoint nodeToWayPoint(Node n, long time) {
+    public static WayPoint nodeToWayPoint(INode n, long time) {
         WayPoint wpt = new WayPoint(n.getCoor());
 
         // Position info
@@ -807,11 +814,11 @@ public class OsmDataLayer extends AbstractModifiableLayer implements Listener, D
         return wpt;
     }
 
-    private static void nodesToGpxData(Collection<Node> nodes, GpxData gpxData, Set<Node> doneNodes) {
-        List<Node> sortedNodes = new ArrayList<>(nodes);
+    private static void nodesToGpxData(OsmData<?, ? extends INode, ? extends IWay<?, ?>, ?> data, GpxData gpxData, Set<INode> doneNodes) {
+        List<INode> sortedNodes = new ArrayList<>(data.getNodes());
         sortedNodes.removeAll(doneNodes);
         Collections.sort(sortedNodes);
-        for (Node n : sortedNodes) {
+        for (INode n : sortedNodes) {
             if (n.isIncomplete() || n.isDeleted()) {
                 continue;
             }
@@ -819,7 +826,7 @@ public class OsmDataLayer extends AbstractModifiableLayer implements Listener, D
         }
     }
 
-    private static void addIntegerIfPresent(WayPoint wpt, OsmPrimitive p, String gpxKey, String... osmKeys) {
+    private static void addIntegerIfPresent(WayPoint wpt, IPrimitive p, String gpxKey, String... osmKeys) {
         List<String> possibleKeys = new ArrayList<>(Arrays.asList(osmKeys));
         possibleKeys.add(0, gpxKey);
         for (String key : possibleKeys) {
@@ -840,7 +847,7 @@ public class OsmDataLayer extends AbstractModifiableLayer implements Listener, D
         }
     }
 
-    private static void addDoubleIfPresent(WayPoint wpt, OsmPrimitive p, String gpxKey, String... osmKeys) {
+    private static void addDoubleIfPresent(WayPoint wpt, IPrimitive p, String gpxKey, String... osmKeys) {
         List<String> possibleKeys = new ArrayList<>(Arrays.asList(osmKeys));
         possibleKeys.add(0, gpxKey);
         for (String key : possibleKeys) {
@@ -860,7 +867,7 @@ public class OsmDataLayer extends AbstractModifiableLayer implements Listener, D
         }
     }
 
-    private static void addStringIfPresent(WayPoint wpt, OsmPrimitive p, String gpxKey, String... osmKeys) {
+    private static void addStringIfPresent(WayPoint wpt, IPrimitive p, String gpxKey, String... osmKeys) {
         List<String> possibleKeys = new ArrayList<>(Arrays.asList(osmKeys));
         possibleKeys.add(0, gpxKey);
         for (String key : possibleKeys) {
@@ -937,7 +944,7 @@ public class OsmDataLayer extends AbstractModifiableLayer implements Listener, D
      * @return the set of conflicts currently managed in this layer
      */
     public ConflictCollection getConflicts() {
-        return data.getConflicts();
+        return getDataSet() != null ? getDataSet().getConflicts() : null;
     }
 
     @Override
@@ -996,7 +1003,7 @@ public class OsmDataLayer extends AbstractModifiableLayer implements Listener, D
 
         @Override
         public void actionPerformed(ActionEvent e) {
-            String result = DatasetConsistencyTest.runTests(data);
+            String result = DatasetConsistencyTest.runTests(getDataSet());
             if (result.isEmpty()) {
                 JOptionPane.showMessageDialog(Main.parent, tr("No problems found"));
             } else {
@@ -1147,7 +1154,7 @@ public class OsmDataLayer extends AbstractModifiableLayer implements Listener, D
     @Override
     public AbstractUploadDialog getUploadDialog() {
         UploadDialog dialog = UploadDialog.getUploadDialog();
-        dialog.setUploadedPrimitives(new APIDataSet(data));
+        dialog.setUploadedPrimitives(new APIDataSet(getDataSet()));
         return dialog;
     }
 

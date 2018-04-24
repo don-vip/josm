@@ -29,9 +29,10 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 import org.openstreetmap.josm.data.Version;
+import org.openstreetmap.josm.data.osm.IPrimitive;
 import org.openstreetmap.josm.data.osm.KeyValueVisitor;
 import org.openstreetmap.josm.data.osm.Node;
-import org.openstreetmap.josm.data.osm.OsmPrimitive;
+import org.openstreetmap.josm.data.osm.OsmUtils;
 import org.openstreetmap.josm.data.osm.OsmUtils;
 import org.openstreetmap.josm.data.osm.Relation;
 import org.openstreetmap.josm.data.osm.Tagged;
@@ -162,7 +163,7 @@ public class MapCSSStyleSource extends StyleSource {
      * indexed. Now you only need to loop the tags of a primitive to retrieve the possibly matching rules.
      *
      * To use this index, you need to {@link #add(MapCSSRule)} all rules to it. You then need to call
-     * {@link #initIndex()}. Afterwards, you can use {@link #getRuleCandidates(OsmPrimitive)} to get an iterator over
+     * {@link #initIndex()}. Afterwards, you can use {@link #getRuleCandidates(IPrimitive)} to get an iterator over
      * all rules that might be applied to that primitive.
      */
     public static class MapCSSRuleIndex {
@@ -357,7 +358,7 @@ public class MapCSSStyleSource extends StyleSource {
          * @param osm the primitive to match
          * @return An iterator over possible rules in the right order.
          */
-        public Iterator<MapCSSRule> getRuleCandidates(OsmPrimitive osm) {
+        public Iterator<MapCSSRule> getRuleCandidates(IPrimitive osm) {
             final BitSet ruleCandidates = new BitSet(rules.size());
             ruleCandidates.or(remaining);
 
@@ -636,7 +637,7 @@ public class MapCSSStyleSource extends StyleSource {
     }
 
     @Override
-    public void apply(MultiCascade mc, OsmPrimitive osm, double scale, boolean pretendWayIsClosed) {
+    public void apply(MultiCascade mc, IPrimitive osm, double scale, boolean pretendWayIsClosed) {
         MapCSSRuleIndex matchingRuleIndex;
         if (osm instanceof Node) {
             matchingRuleIndex = nodeRules;
